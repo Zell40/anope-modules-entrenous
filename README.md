@@ -20,4 +20,4 @@ Chaque module a son `*.example.conf` : copiez-le (ou incluez-le) depuis `anope.c
 
 | Dossier | Module Anope | Rôle |
 | --- | --- | --- |
-| [`aideserv/`](aideserv/) | `aideserv` | AideServ — files d’aide (`AideMoi`) et de signalement (`SignalMoi`) |
+| [`aideserv/`](aideserv/) | `aideserv` | **AideServ** — files d’aide (`AideMoi`) et de signalement (`SignalMoi`) |
