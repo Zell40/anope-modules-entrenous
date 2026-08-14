@@ -1,0 +1,7 @@
+build/
+*.so
+*.dll
+*.mo
+*.swp
+*~
+.DS_Store

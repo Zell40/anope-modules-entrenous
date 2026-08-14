@@ -1,0 +1,307 @@
+# French translations for AideServ (Anope third-party module).
+# SPDX-License-Identifier: GPL-2.0-only
+msgid ""
+msgstr ""
+"Project-Id-Version: aideserv 1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-08-14 14:00+0200\n"
+"PO-Revision-Date: 2026-08-14 14:00+0200\n"
+"Last-Translator: EntreNous\n"
+"Language-Team: French\n"
+"Language: fr_FR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#, c-format
+msgid "Ticket #%u is now open. A helper will take it as soon as possible. You can keep sending messages here; they will be added to the ticket."
+msgstr "Le ticket #%u est maintenant ouvert. Un membre de l'équipe va s'en occuper dès que possible. Vous pouvez continuer à envoyer des messages ici ; ils seront ajoutés au ticket."
+
+#, c-format
+msgid "[%s #%u] %s: %s"
+msgstr "[%s #%u] %s : %s"
+
+#, c-format
+msgid "Your message has been added to ticket #%u."
+msgstr "Votre message a été ajouté au ticket #%u."
+
+#, c-format
+msgid "Ticket #%u new message from %s: %s"
+msgstr "Ticket #%u nouveau message de %s : %s"
+
+#, c-format
+msgid "[%s #%u] update from %s: %s"
+msgstr "[%s #%u] mise à jour de %s : %s"
+
+msgid "Hello, I am the help bot. A ticket is only opened once we know what you need. Please describe your problem (nick, channel, connection, or something else)."
+msgstr "Bonjour, je suis le robot d'aide. Un ticket n'est ouvert qu'une fois que l'on sait de quoi vous avez besoin. Décrivez votre problème (pseudo, salon, connexion, ou autre)."
+
+msgid "Could you give a little more detail so the team can help you? For example what you tried, and what error you see."
+msgstr "Pouvez-vous donner un peu plus de détails pour que l'équipe puisse vous aider ? Par exemple ce que vous avez essayé, et l'erreur que vous voyez."
+
+msgid "Please describe what happened (where, when, and why you are reporting this person)."
+msgstr "Merci de décrire ce qui s'est passé (où, quand, et pourquoi vous signalez cette personne)."
+
+msgid "To file a report, type REPORT nick [#channel] reason (or SIGNALER). Do not discuss reports in public. After the ticket is open, send any evidence here by private message."
+msgstr "Pour déposer un signalement, tapez REPORT pseudo [#salon] raison (ou SIGNALER). Ne discutez pas des signalements en public. Une fois le ticket ouvert, envoyez les preuves ici en message privé."
+
+#, c-format
+msgid "You already have open report ticket #%u. Your message has been added to it."
+msgstr "Vous avez déjà le ticket de signalement #%u ouvert. Votre message y a été ajouté."
+
+msgid "If you have screenshots, logs, or extra details, send them now as private messages."
+msgstr "Si vous avez des captures d'écran, des journaux ou d'autres détails, envoyez-les maintenant en messages privés."
+
+#, c-format
+msgid "I have the nickname %s. Please describe what happened so I can open the ticket as close as possible to your request."
+msgstr "J'ai le pseudo %s. Décrivez ce qui s'est passé pour que je puisse ouvrir le ticket au plus près de votre demande."
+
+#, c-format
+msgid ""
+"%s is the help desk. Describe your problem in a private message; a ticket is opened only once your request is clear.\n"
+"Helpers work from %s. User commands: WAIT (ATTENDRE), STATUS (STATUT), CANCEL (ANNULER)."
+msgstr ""
+"%s est le service d'aide. Décrivez votre problème en message privé ; un ticket n'est ouvert que lorsque votre demande est claire.\n"
+"L'équipe travaille depuis %s. Commandes utilisateur : WAIT (ATTENDRE), STATUS (STATUT), CANCEL (ANNULER)."
+
+#, c-format
+msgid ""
+"%s is the report desk. Use REPORT (SIGNALER) to file a report; do not discuss it in public.\n"
+"Reports are handled privately. User commands: WAIT, STATUS, CANCEL, REPORT."
+msgstr ""
+"%s est le service de signalement. Utilisez REPORT (SIGNALER) pour déposer un signalement ; n'en discutez pas en public.\n"
+"Les signalements sont traités en privé. Commandes utilisateur : WAIT, STATUS, CANCEL, REPORT."
+
+msgid ""
+"Helper commands: LIST, NEXT, PICKUP, SHOW, CLOSE, ADDNOTE, REASSIGN.\n"
+"French aliases: LISTE, SUIVANT, PRENDRE, VOIR, FERMER, NOTE, REASSIGNER."
+msgstr ""
+"Commandes de l'équipe : LIST, NEXT, PICKUP, SHOW, CLOSE, ADDNOTE, REASSIGN.\n"
+"Alias français : LISTE, SUIVANT, PRENDRE, VOIR, FERMER, NOTE, REASSIGNER."
+
+#, c-format
+msgid "Welcome to %s. Send a private message to %s to request help. A ticket is opened only after we understand your problem."
+msgstr "Bienvenue sur %s. Envoyez un message privé à %s pour demander de l'aide. Un ticket n'est ouvert qu'une fois votre problème compris."
+
+#, c-format
+msgid "[%s #%u] opener %s has disconnected; the ticket stays open."
+msgstr "[%s #%u] %s s'est déconnecté ; le ticket reste ouvert."
+
+#, c-format
+msgid "Ticket #%u assigned to %s."
+msgstr "Ticket #%u attribué à %s."
+
+#, c-format
+msgid "Helper %s has taken your ticket #%u."
+msgstr "L'aidant %s a pris votre ticket #%u."
+
+#, c-format
+msgid "[%s #%u] assigned to %s by %s"
+msgstr "[%s #%u] attribué à %s par %s"
+
+msgid "Show your ticket status / position in the queue"
+msgstr "Afficher l'état de votre ticket / votre position dans la file"
+
+#, c-format
+msgid "You do not have an open ticket with %s."
+msgstr "Vous n'avez pas de ticket ouvert auprès de %s."
+
+#, c-format
+msgid "Ticket #%u is being handled by %s."
+msgstr "Le ticket #%u est pris en charge par %s."
+
+#, c-format
+msgid "Ticket #%u is waiting. Approximate position: %u."
+msgstr "Le ticket #%u est en attente. Position approximative : %u."
+
+msgid "Shows whether you have an open ticket and your position in the waiting list."
+msgstr "Indique si vous avez un ticket ouvert et votre position dans la file d'attente."
+
+msgid "Cancel your ticket if it has not been taken yet"
+msgstr "Annuler votre ticket s'il n'a pas encore été pris"
+
+#, c-format
+msgid "Ticket #%u has already been taken and can only be closed by a helper."
+msgstr "Le ticket #%u a déjà été pris et ne peut être fermé que par un aidant."
+
+#, c-format
+msgid "Ticket #%u has been cancelled."
+msgstr "Le ticket #%u a été annulé."
+
+#, c-format
+msgid "[%s #%u] cancelled by %s"
+msgstr "[%s #%u] annulé par %s"
+
+msgid "Cancels your ticket if no helper has taken it yet."
+msgstr "Annule votre ticket si aucun aidant ne l'a encore pris."
+
+msgid "File a report against a user"
+msgstr "Déposer un signalement contre un utilisateur"
+
+msgid "nick [#channel] reason"
+msgstr "pseudo [#salon] raison"
+
+#, c-format
+msgid "Use %s to file a report."
+msgstr "Utilisez %s pour déposer un signalement."
+
+msgid "Files a report against a nickname. Do not discuss the report in a public channel. The ticket is created as soon as the reason is clear; extra evidence can be sent afterwards as private messages. The reported user is not notified."
+msgstr "Dépose un signalement contre un pseudo. N'en discutez pas dans un salon public. Le ticket est créé dès que le motif est clair ; les preuves supplémentaires peuvent être envoyées ensuite en messages privés. La personne signalée n'est pas prévenue."
+
+msgid "List tickets"
+msgstr "Lister les tickets"
+
+msgid "[UNASSIGNED | ASSIGNED | ME | ALL | CLOSED]"
+msgstr "[UNASSIGNED | ASSIGNED | ME | ALL | CLOSED]"
+
+msgid "ID"
+msgstr "N°"
+
+msgid "Queue"
+msgstr "File"
+
+msgid "Status"
+msgstr "État"
+
+msgid "Opener"
+msgstr "Demandeur"
+
+msgid "Helper"
+msgstr "Aidant"
+
+msgid "Summary"
+msgstr "Résumé"
+
+msgid "{id} ({queue}/{status}) {opener} — {summary}"
+msgstr "{id} ({queue}/{status}) {opener} — {summary}"
+
+msgid "No tickets match that filter."
+msgstr "Aucun ticket ne correspond à ce filtre."
+
+msgid "Lists tickets for this bot's queue. Helpers see unassigned tickets by default."
+msgstr "Liste les tickets de la file de ce robot. Les aidants voient les tickets non attribués par défaut."
+
+msgid "Take the oldest waiting ticket"
+msgstr "Prendre le plus ancien ticket en attente"
+
+msgid "There are no waiting tickets."
+msgstr "Il n'y a aucun ticket en attente."
+
+#, c-format
+msgid "Opener: %s (%s) — %s"
+msgstr "Demandeur : %s (%s) — %s"
+
+msgid "Takes the oldest unassigned ticket in this queue."
+msgstr "Prend le plus ancien ticket non attribué de cette file."
+
+msgid "Take a specific ticket"
+msgstr "Prendre un ticket précis"
+
+msgid "id|nick"
+msgstr "id|pseudo"
+
+msgid "Ticket not found."
+msgstr "Ticket introuvable."
+
+#, c-format
+msgid "Ticket #%u is closed."
+msgstr "Le ticket #%u est fermé."
+
+msgid "Takes ticket id or the open ticket of nick."
+msgstr "Prend le ticket id ou le ticket ouvert de pseudo."
+
+msgid "Show a ticket"
+msgstr "Afficher un ticket"
+
+msgid "id"
+msgstr "id"
+
+#, c-format
+msgid "Ticket #%u (%s) — %s"
+msgstr "Ticket #%u (%s) — %s"
+
+#, c-format
+msgid "Opener: %s (%s) account: %s"
+msgstr "Demandeur : %s (%s) compte : %s"
+
+#, c-format
+msgid "Target: %s"
+msgstr "Cible : %s"
+
+#, c-format
+msgid "Channel: %s"
+msgstr "Salon : %s"
+
+#, c-format
+msgid "Opened: %s"
+msgstr "Ouvert : %s"
+
+#, c-format
+msgid "Helper: %s"
+msgstr "Aidant : %s"
+
+#, c-format
+msgid "Summary: %s"
+msgstr "Résumé : %s"
+
+msgid "Messages:"
+msgstr "Messages :"
+
+msgid "Shows the full ticket, including private messages and helper notes."
+msgstr "Affiche le ticket complet, y compris les messages privés et les notes des aidants."
+
+msgid "Close a ticket"
+msgstr "Fermer un ticket"
+
+msgid "id [reason]"
+msgstr "id [raison]"
+
+#, c-format
+msgid "Ticket #%u is already closed."
+msgstr "Le ticket #%u est déjà fermé."
+
+#, c-format
+msgid "Ticket #%u closed."
+msgstr "Ticket #%u fermé."
+
+#, c-format
+msgid "Your ticket #%u has been closed."
+msgstr "Votre ticket #%u a été fermé."
+
+#, c-format
+msgid "Your ticket #%u has been closed: %s"
+msgstr "Votre ticket #%u a été fermé : %s"
+
+#, c-format
+msgid "[%s #%u] closed by %s (%s)"
+msgstr "[%s #%u] fermé par %s (%s)"
+
+msgid "Closes a ticket. The opener is notified."
+msgstr "Ferme un ticket. Le demandeur est prévenu."
+
+msgid "Add an internal note to a ticket"
+msgstr "Ajouter une note interne à un ticket"
+
+msgid "id text"
+msgstr "id texte"
+
+#, c-format
+msgid "Note added to ticket #%u."
+msgstr "Note ajoutée au ticket #%u."
+
+msgid "Adds a helper-only note. The opener does not see it."
+msgstr "Ajoute une note visible uniquement par l'équipe. Le demandeur ne la voit pas."
+
+msgid "Reassign a ticket to another helper"
+msgstr "Réattribuer un ticket à un autre aidant"
+
+msgid "id helper"
+msgstr "id aidant"
+
+msgid "Gives the ticket to another helper."
+msgstr "Donne le ticket à un autre aidant."
+
+msgid "Helper commands"
+msgstr "Commandes de l'équipe"
+
