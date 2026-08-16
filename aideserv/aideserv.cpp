@@ -516,11 +516,12 @@ public:
 	BotInfo *GetHelpBot() { return HelpBot; }
 	BotInfo *GetReportBot() { return ReportBot; }
 
-	bool IsHelpBot(BotInfo *bi) const { return HelpBot && bi == *HelpBot; }
-	bool IsReportBot(BotInfo *bi) const { return ReportBot && bi == *ReportBot; }
-	bool IsOurBot(BotInfo *bi) const { return IsHelpBot(bi) || IsReportBot(bi); }
+	// Reference<>'s operator bool / operator* are non-const in Anope.
+	bool IsHelpBot(BotInfo *bi) { return bi && bi == static_cast<BotInfo *>(HelpBot); }
+	bool IsReportBot(BotInfo *bi) { return bi && bi == static_cast<BotInfo *>(ReportBot); }
+	bool IsOurBot(BotInfo *bi) { return IsHelpBot(bi) || IsReportBot(bi); }
 
-	Anope::string QueueFor(BotInfo *bi) const
+	Anope::string QueueFor(BotInfo *bi)
 	{
 		return IsReportBot(bi) ? QUEUE_REPORT : QUEUE_HELP;
 	}
@@ -1402,8 +1403,8 @@ public:
 	}
 };
 
-class ModuleAideServServCommands final
-	: public ModuleAide
+class ModuleAideServCommands final
+	: public ModuleAideServ
 {
 	CommandAideServWait cmdwait;
 	CommandAideServCancel cmdcancel;
