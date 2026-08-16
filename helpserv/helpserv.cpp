@@ -45,13 +45,145 @@ namespace
 			|| t.equals_ci("bonsoir") || t.equals_ci("re") || t.equals_ci("slt") || t.equals_ci("cc");
 	}
 
-	bool LooksLikeRequest(const Anope::string &text)
+	Anope::string FoldTriageText(const Anope::string &in)
 	{
-		Anope::string t = text;
-		t.trim();
-		if (t.length() < 12)
+		Anope::string t = in.lower();
+		static const char *const pairs[][2] = {
+			{"é", "e"}, {"è", "e"}, {"ê", "e"}, {"ë", "e"},
+			{"à", "a"}, {"â", "a"}, {"ä", "a"}, {"á", "a"},
+			{"ù", "u"}, {"û", "u"}, {"ü", "u"}, {"ú", "u"},
+			{"ô", "o"}, {"ö", "o"}, {"ó", "o"},
+			{"î", "i"}, {"ï", "i"}, {"í", "i"},
+			{"ç", "c"}, {"œ", "oe"}, {"æ", "ae"},
+			{"’", "'"}, {"‘", "'"}, {"`", "'"}, {"´", "'"},
+		};
+		for (const auto &pair : pairs)
+			t = t.replace_all_cs(pair[0], pair[1]);
+
+		Anope::string out;
+		for (size_t i = 0; i < t.length(); ++i)
+		{
+			unsigned char c = static_cast<unsigned char>(t[i]);
+			if (c == '\'')
+				continue;
+			if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))
+				out.push_back(static_cast<char>(c));
+			else if (!out.empty() && out[out.length() - 1] != ' ')
+				out.push_back(' ');
+		}
+		out.trim();
+		return out;
+	}
+
+	bool LooksLikeRequest(const Anope::string &text, unsigned min_len)
+	{
+		Anope::string t = FoldTriageText(text);
+		if (t.empty())
 			return false;
-		return !IsGreeting(t);
+
+		/* Longest phrases first so "j'ai besoin d'aide" is removed as a whole. */
+		static const char *const filler[] = {
+			"est ce que vous pouvez maider",
+			"est ce que tu peux maider",
+			"est ce que quelquun peut maider",
+			"quelquun pourrait maider",
+			"quelquun peut il maider",
+			"vous pouvez maider",
+			"pouvez vous maider",
+			"peux tu maider",
+			"tu peux maider",
+			"qqn peut maider",
+			"quelquun peut maider",
+			"jai besoin daide",
+			"jaurai besoin daide",
+			"jaimerais de laide",
+			"je voudrais de laide",
+			"je veux de laide",
+			"besoin daide",
+			"aidez moi sil vous plait",
+			"aidez moi svp",
+			"aidez moi",
+			"aide moi svp",
+			"aide moi",
+			"help me please",
+			"can you help me",
+			"can you help",
+			"i need help",
+			"need help",
+			"please help",
+			"help me",
+			"jai un probleme",
+			"jai un soucis",
+			"jai un souci",
+			"jai une question",
+			"jai un pb",
+			"comment allez vous",
+			"comment vas tu",
+			"comment ca va",
+			"cest urgent",
+			"c urgent",
+			"sil vous plait",
+			"sil te plait",
+			"hello there",
+			"how are you",
+			"whats up",
+			"a laide",
+			"au secours",
+			"bonjour",
+			"bonsoir",
+			"salutations",
+			"salut",
+			"coucou",
+			"hello",
+			"please",
+			"merci",
+			"thanks",
+			"thx",
+			"svp",
+			"urgent",
+			"urgence",
+			"sos",
+			"aled",
+			"help",
+			"hey",
+			"yo",
+			"hi",
+			"bjr",
+			"slt",
+			"cc",
+			"re",
+			"wesh",
+			"hola",
+			"ok",
+			"okay",
+			"daccord",
+			"dac",
+			"ca va",
+		};
+
+		Anope::string hay = " " + t + " ";
+		for (const char *phrase : filler)
+			hay = hay.replace_all_cs(Anope::string(" ") + phrase + " ", " ");
+
+		Anope::string remaining;
+		bool space = false;
+		for (size_t i = 0; i < hay.length(); ++i)
+		{
+			char c = hay[i];
+			if (c == ' ')
+			{
+				if (!space && !remaining.empty())
+					remaining.push_back(' ');
+				space = true;
+			}
+			else
+			{
+				remaining.push_back(c);
+				space = false;
+			}
+		}
+		remaining.trim();
+		return remaining.length() >= min_len;
 	}
 
 	Anope::string FirstToken(const Anope::string &message)
@@ -72,6 +204,20 @@ namespace
 			return false;
 		auto *cm = ModeManager::FindChannelModeByName(mode);
 		return cm && memb->status.HasMode(cm);
+	}
+
+	bool HasPrivilegedChanStatus(User *u, Channel *c)
+	{
+		return HasChanStatus(u, c, "OWNER") || HasChanStatus(u, c, "PROTECT")
+			|| HasChanStatus(u, c, "OP") || HasChanStatus(u, c, "HALFOP");
+	}
+
+	bool HasChanVoiceAccess(User *u, Channel *c)
+	{
+		if (!u || !c || !c->ci)
+			return false;
+		auto ag = c->ci->AccessFor(u);
+		return ag.HasPriv("VOICE") || ag.HasPriv("VOICEME");
 	}
 
 	bool HasChannelOp(User *u, ChannelInfo *ci)
@@ -609,7 +755,7 @@ public:
 	{
 		MeHelpServ = this;
 		SetAuthor("EntreNous");
-		SetVersion("1.1");
+		SetVersion("1.2");
 		ModuleManager::SetPriority(this, I_OnInvite, PRIORITY_LAST);
 	}
 
@@ -916,17 +1062,13 @@ public:
 		}
 		st.notes.push_back(message);
 
-		if (IsGreeting(message) && st.step == 0)
+		if (!LooksLikeRequest(message, min_request_len))
 		{
-			st.step = 1;
-			u->SendMessage(bi, _("Hello, I am the help bot. A ticket is only opened once we know what you need. Please describe your problem (nick, channel, connection, or something else)."));
-			return;
-		}
-
-		if (!LooksLikeRequest(message) && st.step < 2)
-		{
-			st.step = 2;
-			u->SendMessage(bi, _("Could you give a little more detail so the team can help you? For example what you tried, and what error you see."));
+			if (IsGreeting(message) && st.step == 0)
+				u->SendMessage(bi, _("Hello, I am the help bot. A ticket is only opened once we know what you need. Please describe your problem (nick, channel, connection, or something else)."));
+			else
+				u->SendMessage(bi, _("Could you give a little more detail so the team can help you? For example what you tried, and what error you see."));
+			++st.step;
 			return;
 		}
 
@@ -949,7 +1091,7 @@ public:
 		{
 			auto &st = it->second;
 			st.notes.push_back(message);
-			if (!LooksLikeRequest(message) && st.summary.empty() && st.notes.size() < 3)
+			if (!LooksLikeRequest(message, min_request_len))
 			{
 				u->SendMessage(bi, _("Please describe what happened (where, when, and why you are reporting this person)."));
 				return;
@@ -978,7 +1120,7 @@ public:
 			return;
 		}
 
-		if (LooksLikeRequest(reason) && reason.length() >= min_request_len)
+		if (LooksLikeRequest(reason, min_request_len))
 		{
 			std::vector<Anope::string> notes;
 			notes.push_back(reason);
@@ -1069,19 +1211,54 @@ public:
 
 	void OnJoinChannel(User *u, Channel *c) override
 	{
-		if (!u || !c || u->server == Me || !AideBot)
+		if (!u || !c || u->server == Me)
 			return;
 		if (IsStaff(u))
 			return;
-		if (c->name.equals_ci(staff_channel) || c->name.equals_ci(log_channel))
+
+		Anope::string queue = QueueForDesk(c->name);
+		if (!queue.empty())
+		{
+			if (AideTicket *t = AideTicket::FindOpenFor(u, queue))
+			{
+				RefreshOpener(t, u);
+				if (t->status.equals_ci(STATUS_ASSIGNED))
+					VoiceOpener(t, false);
+				return;
+			}
+		}
+
+		if (!AideBot || !c->FindUser(AideBot))
 			return;
-		if (!c->FindUser(AideBot))
+		if (c->name.equals_ci(staff_channel) || c->name.equals_ci(log_channel))
 			return;
 		if (!help_greeting.empty())
 			u->SendMessage(AideBot, "%s", help_greeting.c_str());
 		else
 			u->SendMessage(AideBot, _("Welcome to %s. Send a private message to \002%s\002 to request help. A ticket is opened only after we understand your problem."),
 				c->name.c_str(), AideBot->nick.c_str());
+	}
+
+	void OnLeaveChannel(User *u, Channel *c) override
+	{
+		if (!u || !c || u->quit || u->server == Me)
+			return;
+
+		Anope::string queue = QueueForDesk(c->name);
+		if (queue.empty())
+			return;
+
+		for (auto *t : Tickets)
+		{
+			if (t->status.equals_ci(STATUS_CLOSED) || !t->queue.equals_ci(queue))
+				continue;
+			if (!t->opener_uid.equals_ci(u->GetUID()) && !t->opener_nick.equals_ci(u->nick)
+				&& !(u->Account() && t->opener_account.equals_ci(u->Account()->display)))
+				continue;
+			t->AddLine('S', u->nick, "opener left " + c->name);
+			const char *pfmt = Language::Translate(_("[\002%s #%u\002] opener %s has left %s; the ticket stays open."));
+			NotifyStaff(Anope::Format(pfmt, t->queue.c_str(), t->id, u->nick.c_str(), c->name.c_str()));
+		}
 	}
 
 	void OnUserQuit(User *u, const Anope::string &) override
@@ -1131,6 +1308,110 @@ public:
 		return best;
 	}
 
+	Anope::string DeskChannelFor(const Anope::string &queue) const
+	{
+		return queue.equals_ci(QUEUE_REPORT) ? report_channel : help_channel;
+	}
+
+	Anope::string QueueForDesk(const Anope::string &chname) const
+	{
+		if (chname.equals_ci(help_channel))
+			return QUEUE_HELP;
+		if (chname.equals_ci(report_channel))
+			return QUEUE_REPORT;
+		return "";
+	}
+
+	User *FindOpener(const AideTicket *t)
+	{
+		if (!t)
+			return nullptr;
+		if (!t->opener_uid.empty())
+		{
+			if (User *u = User::Find(t->opener_uid))
+				return u;
+		}
+		if (User *u = User::Find(t->opener_nick, true))
+			return u;
+		if (!t->opener_account.empty())
+		{
+			if (NickCore *nc = NickCore::Find(t->opener_account))
+			{
+				if (!nc->users.empty())
+					return nc->users.front();
+			}
+		}
+		return nullptr;
+	}
+
+	void RefreshOpener(AideTicket *t, User *u)
+	{
+		if (!t || !u)
+			return;
+		bool dirty = false;
+		if (t->opener_nick != u->nick)
+		{
+			t->opener_nick = u->nick;
+			dirty = true;
+		}
+		if (t->opener_uid != u->GetUID())
+		{
+			t->opener_uid = u->GetUID();
+			dirty = true;
+		}
+		if (u->Account() && t->opener_account != u->Account()->display)
+		{
+			t->opener_account = u->Account()->display;
+			dirty = true;
+		}
+		if (dirty)
+			t->QueueUpdate();
+	}
+
+	void VoiceOpener(AideTicket *t, bool invite_if_absent)
+	{
+		if (!t || !IRCD)
+			return;
+		User *u = FindOpener(t);
+		BotInfo *bi = BotForQueue(t->queue);
+		if (!u || !bi)
+			return;
+
+		Anope::string chname = DeskChannelFor(t->queue);
+		Channel *c = Channel::Find(chname);
+		if (!c || !c->FindUser(bi))
+			return;
+
+		if (c->FindUser(u))
+		{
+			if (!HasPrivilegedChanStatus(u, c) && !HasChanStatus(u, c, "VOICE"))
+				c->SetMode(bi, "VOICE", u->GetUID());
+			return;
+		}
+
+		if (!invite_if_absent)
+			return;
+
+		IRCD->SendInvite(bi, c, u);
+	}
+
+	void DevoiceOpener(AideTicket *t)
+	{
+		if (!t)
+			return;
+		User *u = FindOpener(t);
+		BotInfo *bi = BotForQueue(t->queue);
+		if (!u || !bi)
+			return;
+
+		Channel *c = Channel::Find(DeskChannelFor(t->queue));
+		if (!c || !c->FindUser(bi) || !c->FindUser(u))
+			return;
+		if (!HasChanStatus(u, c, "VOICE") || HasPrivilegedChanStatus(u, c) || HasChanVoiceAccess(u, c))
+			return;
+		c->RemoveMode(bi, "VOICE", u->GetUID());
+	}
+
 	void Assign(CommandSource &source, AideTicket *t, const Anope::string &helper)
 	{
 		t->assignee = helper;
@@ -1138,13 +1419,21 @@ public:
 		t->assigned = Anope::CurTime;
 		t->AddLine('S', source.GetNick(), "assigned to " + helper);
 		source.Reply(_("Ticket \002#%u\002 assigned to \002%s\002."), t->id, helper.c_str());
-		User *opener = User::Find(t->opener_nick, true);
-		if (opener)
+		User *opener = FindOpener(t);
+		BotInfo *userbot = BotForQueue(t->queue);
+		Anope::string desk = DeskChannelFor(t->queue);
+		if (opener && userbot)
 		{
-			BotInfo *userbot = BotForQueue(t->queue);
-			if (userbot)
-				opener->SendMessage(userbot, _("Helper \002%s\002 has taken your ticket \002#%u\002."), helper.c_str(), t->id);
+			Channel *c = Channel::Find(desk);
+			bool on_desk = c && c->FindUser(opener);
+			if (on_desk)
+				opener->SendMessage(userbot, _("Helper \002%s\002 has taken your ticket \002#%u\002. You have been given voice on \002%s\002."),
+					helper.c_str(), t->id, desk.c_str());
+			else
+				opener->SendMessage(userbot, _("Helper \002%s\002 has taken your ticket \002#%u\002. Join \002%s\002 to talk with them; you will be given voice there."),
+					helper.c_str(), t->id, desk.c_str());
 		}
+		VoiceOpener(t, true);
 		const char *afmt = Language::Translate(_("[\002%s #%u\002] assigned to %s by %s"));
 		NotifyStaff(Anope::Format(afmt, t->queue.c_str(), t->id, helper.c_str(), source.GetNick().c_str()));
 	}
@@ -1254,6 +1543,7 @@ public:
 		t->closed = Anope::CurTime;
 		t->close_reason = "cancelled by opener";
 		t->AddLine('S', u->nick, "cancelled");
+		mod->DevoiceOpener(t);
 		source.Reply(_("Ticket \002#%u\002 has been cancelled."), t->id);
 		const char *cfmt = Language::Translate(_("[\002%s #%u\002] cancelled by %s"));
 		mod->NotifyStaff(Anope::Format(cfmt, t->queue.c_str(), t->id, u->nick.c_str()));
@@ -1590,7 +1880,8 @@ public:
 		t->close_reason = reason.empty() ? "closed" : reason;
 		t->AddLine('S', source.GetNick(), "closed: " + t->close_reason);
 		source.Reply(_("Ticket \002#%u\002 closed."), t->id);
-		User *opener = User::Find(t->opener_nick, true);
+		MeHelpServ->DevoiceOpener(t);
+		User *opener = MeHelpServ->FindOpener(t);
 		if (opener)
 		{
 			BotInfo *userbot = MeHelpServ->BotForQueue(t->queue);

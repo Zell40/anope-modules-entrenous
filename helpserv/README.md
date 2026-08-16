@@ -67,3 +67,9 @@ Alias FR : `LISTE`, `SUIVANT`, `PRENDRE`, `VOIR`, `FERMER`, `NOTE`, `REASSIGNER`
 
 - AideMoi : `WAIT` / `ATTENDRE`, `STATUS` / `STATUT`, `CANCEL` / `ANNULER`
 - SignalMoi : les mêmes, plus `REPORT` / `SIGNALER`
+
+Un ticket n’est **pas** ouvert sur un salut ou une demande vide (« j’ai besoin d’aide », « aidez-moi », « help »). AideMoi redemande le problème (pseudo, salon, connexion, erreur). Le ticket s’ouvre seulement quand il reste une vraie description. Les messages de triage restent dans l’historique du ticket. `QUIT` pendant ce dialogue abandonne le triage (aucun ticket).
+
+Quand un aidant prend un ticket (`NEXT` / `PICKUP`), l’ouvreur est prévenu en message privé (AideMoi ou SignalMoi). S’il est déjà sur `#Aide.chat` ou `#Signalement.chat`, il reçoit le voice (`+v`). Sinon il est invité sur le salon ; le voice est posé dès qu’il rejoint.
+
+Un `PART` / kick du salon d’aide, ou un `QUIT`, n’annule pas le ticket : l’équipe est prévenue et le ticket reste ouvert. Au retour, si le ticket est encore attribué, le voice est remis. `CLOSE` retire le voice.

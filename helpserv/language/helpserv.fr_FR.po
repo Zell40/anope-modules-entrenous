@@ -89,12 +89,20 @@ msgid "[%s #%u] opener %s has disconnected; the ticket stays open."
 msgstr "[%s #%u] %s s'est déconnecté ; le ticket reste ouvert."
 
 #, c-format
+msgid "[%s #%u] opener %s has left %s; the ticket stays open."
+msgstr "[%s #%u] %s a quitté %s ; le ticket reste ouvert."
+
+#, c-format
 msgid "Ticket #%u assigned to %s."
 msgstr "Ticket #%u attribué à %s."
 
 #, c-format
-msgid "Helper %s has taken your ticket #%u."
-msgstr "L'aidant %s a pris votre ticket #%u."
+msgid "Helper %s has taken your ticket #%u. You have been given voice on %s."
+msgstr "L'aidant %s a pris votre ticket #%u. Vous avez reçu le voice sur %s."
+
+#, c-format
+msgid "Helper %s has taken your ticket #%u. Join %s to talk with them; you will be given voice there."
+msgstr "L'aidant %s a pris votre ticket #%u. Rejoignez %s pour lui parler ; vous y recevrez le voice."
 
 #, c-format
 msgid "[%s #%u] assigned to %s by %s"
