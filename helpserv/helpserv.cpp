@@ -247,6 +247,142 @@ namespace
 		return false;
 	}
 
+	Anope::string StripNickPunct(const Anope::string &in)
+	{
+		Anope::string t = in;
+		while (!t.empty())
+		{
+			char c = t[t.length() - 1];
+			if (c == ',' || c == '.' || c == '!' || c == '?' || c == ':' || c == ';' || c == '"' || c == '\'')
+				t.erase(t.length() - 1);
+			else
+				break;
+		}
+		while (!t.empty() && (t[0] == '"' || t[0] == '\'' || t[0] == '<' || t[0] == '('))
+			t.erase(t.begin());
+		t.trim();
+		return t;
+	}
+
+	bool IsNickStopWord(const Anope::string &s)
+	{
+		return s.equals_ci("je") || s.equals_ci("tu") || s.equals_ci("il") || s.equals_ci("elle")
+			|| s.equals_ci("on") || s.equals_ci("nous") || s.equals_ci("vous") || s.equals_ci("ils")
+			|| s.equals_ci("me") || s.equals_ci("te") || s.equals_ci("le") || s.equals_ci("la")
+			|| s.equals_ci("les") || s.equals_ci("un") || s.equals_ci("une") || s.equals_ci("des")
+			|| s.equals_ci("ce") || s.equals_ci("cet") || s.equals_ci("cette") || s.equals_ci("ma")
+			|| s.equals_ci("mon") || s.equals_ci("mes") || s.equals_ci("son") || s.equals_ci("ses")
+			|| s.equals_ci("que") || s.equals_ci("qui") || s.equals_ci("pas") || s.equals_ci("sur")
+			|| s.equals_ci("dans") || s.equals_ci("pour") || s.equals_ci("avec") || s.equals_ci("mais")
+			|| s.equals_ci("donc") || s.equals_ci("car") || s.equals_ci("the") || s.equals_ci("and")
+			|| s.equals_ci("for") || s.equals_ci("not") || s.equals_ci("this") || s.equals_ci("that")
+			|| s.equals_ci("bonjour") || s.equals_ci("salut") || s.equals_ci("coucou") || s.equals_ci("hello")
+			|| s.equals_ci("aide") || s.equals_ci("help") || s.equals_ci("report") || s.equals_ci("signale")
+			|| s.equals_ci("signaler") || s.equals_ci("signalement") || s.equals_ci("ticket") || s.equals_ci("svp")
+			|| s.equals_ci("please") || s.equals_ci("merci") || s.equals_ci("pseudo") || s.equals_ci("nick")
+			|| s.equals_ci("contre") || s.equals_ci("utilisateur") || s.equals_ci("personne") || s.equals_ci("type");
+	}
+
+	bool LooksLikeNickToken(const Anope::string &raw)
+	{
+		Anope::string s = StripNickPunct(raw);
+		if (s.length() < 2 || s.length() > 32)
+			return false;
+		if (s[0] == '#' || s[0] == ':' || s[0] == '@')
+			return false;
+		if (IsGreeting(s) || IsNickStopWord(s))
+			return false;
+		unsigned char first = static_cast<unsigned char>(s[0]);
+		if (!((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')
+			|| first == '[' || first == ']' || first == '\\' || first == '`'
+			|| first == '_' || first == '^' || first == '{' || first == '|' || first == '}'))
+			return false;
+		for (size_t i = 0; i < s.length(); ++i)
+		{
+			unsigned char c = static_cast<unsigned char>(s[i]);
+			if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+				|| c == '-' || c == '[' || c == ']' || c == '\\' || c == '`'
+				|| c == '_' || c == '^' || c == '{' || c == '|' || c == '}')
+				continue;
+			return false;
+		}
+		return true;
+	}
+
+	bool LooksLikeUnknownPerson(const Anope::string &text)
+	{
+		Anope::string t = FoldTriageText(text);
+		return t.equals_ci("inconnu") || t.equals_ci("inconnue") || t.equals_ci("quelquun")
+			|| t.equals_ci("je sais pas") || t.equals_ci("je ne sais pas") || t.equals_ci("aucune idee")
+			|| t.equals_ci("pas de pseudo") || t.equals_ci("nsp") || t.equals_ci("aucun")
+			|| t.equals_ci("personne") || t.equals_ci("un inconnu") || t.equals_ci("je connais pas");
+	}
+
+	void ExtractReportClues(const Anope::string &message, const User *from, Anope::string &nick, Anope::string &chan)
+	{
+		nick.clear();
+		chan.clear();
+		spacesepstream ss(message);
+		std::vector<Anope::string> tokens;
+		for (Anope::string tok; ss.GetToken(tok);)
+		{
+			tok = StripNickPunct(tok);
+			if (!tok.empty())
+				tokens.push_back(tok);
+		}
+		for (const auto &t : tokens)
+		{
+			if (t[0] == '#' && t.length() > 1 && chan.empty())
+				chan = t;
+		}
+		for (const auto &t : tokens)
+		{
+			if (!LooksLikeNickToken(t) || (from && t.equals_ci(from->nick)))
+				continue;
+			if (User *found = User::Find(t, true))
+			{
+				if (dynamic_cast<BotInfo *>(found))
+					continue;
+				nick = t;
+				return;
+			}
+			if (NickAlias::Find(t))
+			{
+				nick = t;
+				return;
+			}
+		}
+		for (const auto &t : tokens)
+		{
+			if (LooksLikeNickToken(t) && !(from && t.equals_ci(from->nick)))
+			{
+				nick = t;
+				return;
+			}
+		}
+	}
+
+	bool LooksLikeNickOnly(const Anope::string &message)
+	{
+		spacesepstream ss(message);
+		Anope::string tok;
+		bool has_nick = false;
+		int others = 0;
+		while (ss.GetToken(tok))
+		{
+			tok = StripNickPunct(tok);
+			if (tok.empty())
+				continue;
+			if (tok[0] == '#')
+				continue;
+			if (LooksLikeNickToken(tok) && !has_nick)
+				has_nick = true;
+			else
+				++others;
+		}
+		return has_nick && others == 0;
+	}
+
 	Anope::string FirstToken(const Anope::string &message)
 	{
 		Anope::string tok;
@@ -776,7 +912,7 @@ class ModuleHelpServ
 
 		if (report)
 		{
-			bi->SetCommand("REPORT", "helpserv/report");
+			bi->SetCommand("REPORT", "helpserv/report").hide = true;
 			bi->SetCommand("SIGNALER", "helpserv/report").hide = true;
 		}
 	}
@@ -1274,25 +1410,69 @@ public:
 			AppendTicket(existing, u, bi, message);
 			return;
 		}
-
-		auto it = triages.find(u->GetUID());
-		if (it != triages.end() && it->second.queue.equals_ci(QUEUE_REPORT))
+		if (require_account_report && !u->Account())
 		{
-			auto &st = it->second;
-			st.notes.push_back(message);
-			if (!LooksLikeRequest(message, min_request_len))
-			{
-				u->SendMessage(bi, _("Please describe what happened (where, when, and why you are reporting this person)."));
-				return;
-			}
-			if (st.summary.empty())
-				st.summary = message;
-			CreateTicket(u, bi, QUEUE_REPORT, st.summary, st.category, st.target, st.channel, st.notes);
-			triages.erase(u->GetUID());
+			u->SendMessage(bi, NICK_IDENTIFY_REQUIRED);
 			return;
 		}
 
-		u->SendMessage(bi, _("To file a report, type \002REPORT \037nick\037 [\037#channel\037] \037reason\037\002 (or \002SIGNALER\002). Do not discuss reports in public. After the ticket is open, send any evidence here by private message."));
+		auto &st = triages[u->GetUID()];
+		if (!st.started || !st.queue.equals_ci(QUEUE_REPORT))
+		{
+			st = TriageState();
+			st.queue = QUEUE_REPORT;
+			st.started = Anope::CurTime;
+			st.step = 0;
+		}
+		st.notes.push_back(message);
+
+		Anope::string nick, chan;
+		ExtractReportClues(message, u, nick, chan);
+		if (!nick.empty() && st.target.empty())
+			st.target = nick;
+		if (!chan.empty() && st.channel.empty())
+			st.channel = chan;
+
+		const bool unknown = LooksLikeUnknownPerson(message);
+		const bool nick_only = LooksLikeNickOnly(message);
+		const bool enough = LooksLikeRequest(message, min_request_len) && !nick_only && !unknown;
+		if (enough && st.summary.empty())
+			st.summary = message;
+
+		if (IsGreeting(message) && st.target.empty() && st.summary.empty())
+		{
+			u->SendMessage(bi, _("Hello, I take reports in private. Who are you reporting? Give their nickname if you know it, then describe what happened. Do not discuss this in a public channel."));
+			++st.step;
+			return;
+		}
+
+		if (st.target.empty() && !unknown)
+		{
+			if (enough)
+				u->SendMessage(bi, _("I have noted that. Who are you reporting? Give their nickname, or say you do not know it."));
+			else
+				u->SendMessage(bi, _("Who are you reporting? Give their nickname. You can also describe what happened."));
+			++st.step;
+			return;
+		}
+
+		if (st.summary.empty() || !LooksLikeRequest(st.summary, min_request_len))
+		{
+			if (!enough)
+			{
+				if (!st.target.empty())
+					u->SendMessage(bi, _("I have the nickname \002%s\002. Please describe what happened (where, when, and why you are reporting this person)."), st.target.c_str());
+				else
+					u->SendMessage(bi, _("Please describe what happened (where, when, and why you are reporting this person)."));
+				++st.step;
+				return;
+			}
+			st.summary = message;
+		}
+
+		CreateTicket(u, bi, QUEUE_REPORT, st.summary, st.category, st.target, st.channel, st.notes);
+		triages.erase(u->GetUID());
+		u->SendMessage(bi, _("If you have screenshots, logs, or extra details, send them now as private messages."));
 	}
 
 	void StartReport(User *u, BotInfo *bi, const Anope::string &target, const Anope::string &chan, const Anope::string &reason)
@@ -1366,8 +1546,8 @@ public:
 				"Helpers work from \002%s\002. User commands: \002WAIT\002 (\002ATTENDRE\002), \002STATUS\002 (\002STATUT\002), \002CANCEL\002 (\002ANNULER\002)."),
 				AideBot->nick.c_str(), StaffBot ? StaffBot->nick.c_str() : "HelpServ");
 		else
-			source.Reply(_("\002%s\002 is the report desk. Use \002REPORT\002 (\002SIGNALER\002) to file a report; do not discuss it in public.\n"
-				"Reports are handled by \002%s\002. User commands: \002WAIT\002, \002STATUS\002, \002CANCEL\002, \002REPORT\002."),
+			source.Reply(_("\002%s\002 is the report desk. Describe the report in a private message; a ticket is opened once we know who and what happened. Do not discuss it in public.\n"
+				"Reports are handled by \002%s\002. User commands: \002WAIT\002, \002STATUS\002, \002CANCEL\002."),
 				ReportBot->nick.c_str(), StaffBot ? StaffBot->nick.c_str() : "HelpServ");
 		return EVENT_CONTINUE;
 	}
@@ -1417,6 +1597,12 @@ public:
 			}
 		}
 
+		if (ReportBot && c->name.equals_ci(report_channel) && c->FindUser(ReportBot))
+		{
+			u->SendMessage(ReportBot, _("Welcome to %s. Send a private message to \002%s\002 to file a report. Describe what happened; no special command is needed. Do not discuss reports in public."),
+				c->name.c_str(), ReportBot->nick.c_str());
+			return;
+		}
 		if (!AideBot || !c->FindUser(AideBot))
 			return;
 		if (c->name.equals_ci(staff_channel) || c->name.equals_ci(log_channel))
@@ -1793,8 +1979,8 @@ public:
 		this->SendSyntax(source);
 		source.Reply(" ");
 		source.Reply(_(
-			"Files a report against a nickname. Do not discuss the report in a public channel. "
-			"The ticket is created as soon as the reason is clear; extra evidence can be sent afterwards as private messages. "
+			"You can also just describe the report in a private message; a ticket opens automatically once the nickname and the facts are clear. "
+			"Do not discuss the report in a public channel. Extra evidence can be sent afterwards as private messages. "
 			"The reported user is not notified."
 		));
 		return true;

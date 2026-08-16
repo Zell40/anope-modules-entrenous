@@ -45,6 +45,15 @@ msgstr "%s — mise à jour de %s : %s"
 msgid "Hello, I am the help bot. A ticket is only opened once we know what you need. Please describe your problem (nick, channel, connection, or something else)."
 msgstr "Bonjour, je suis le robot d'aide. Un ticket n'est ouvert qu'une fois que l'on sait de quoi vous avez besoin. Décrivez votre problème (pseudo, salon, connexion, ou autre)."
 
+msgid "Hello, I take reports in private. Who are you reporting? Give their nickname if you know it, then describe what happened. Do not discuss this in a public channel."
+msgstr "Bonjour, je prends les signalements en privé. Qui signalez-vous ? Donnez son pseudo si vous le connaissez, puis décrivez ce qui s'est passé. N'en discutez pas sur un salon public."
+
+msgid "I have noted that. Who are you reporting? Give their nickname, or say you do not know it."
+msgstr "C'est noté. Qui signalez-vous ? Donnez son pseudo, ou dites si vous ne le connaissez pas."
+
+msgid "Who are you reporting? Give their nickname. You can also describe what happened."
+msgstr "Qui signalez-vous ? Donnez son pseudo. Vous pouvez aussi décrire ce qui s'est passé."
+
 msgid "Could you give a little more detail so the team can help you? For example what you tried, and what error you see."
 msgstr "Pouvez-vous donner un peu plus de détails pour que l'équipe puisse vous aider ? Par exemple ce que vous avez essayé, et l'erreur que vous voyez."
 
@@ -81,11 +90,11 @@ msgstr ""
 
 #, c-format
 msgid ""
-"%s is the report desk. Use REPORT (SIGNALER) to file a report; do not discuss it in public.\n"
-"Reports are handled privately. User commands: WAIT, STATUS, CANCEL, REPORT."
+"%s is the report desk. Describe the report in a private message; a ticket is opened once we know who and what happened. Do not discuss it in public.\n"
+"Reports are handled by %s. User commands: WAIT, STATUS, CANCEL."
 msgstr ""
-"%s est le service de signalement. Utilisez REPORT (SIGNALER) pour déposer un signalement ; n'en discutez pas en public.\n"
-"Les signalements sont traités en privé. Commandes utilisateur : WAIT, STATUS, CANCEL, REPORT."
+"%s est le service de signalement. Décrivez le signalement en message privé ; un ticket est ouvert une fois que l'on sait qui et ce qui s'est passé. N'en discutez pas en public.\n"
+"Les signalements sont traités par %s. Commandes utilisateur : WAIT, STATUS, CANCEL."
 
 msgid ""
 "Helper commands: LIST, NEXT, PICKUP, SHOW, CLOSE, ADDNOTE, REASSIGN.\n"
@@ -97,6 +106,10 @@ msgstr ""
 #, c-format
 msgid "Welcome to %s. Send a private message to %s to request help. A ticket is opened only after we understand your problem."
 msgstr "Bienvenue sur %s. Envoyez un message privé à %s pour demander de l'aide. Un ticket n'est ouvert qu'une fois votre problème compris."
+
+#, c-format
+msgid "Welcome to %s. Send a private message to %s to file a report. Describe what happened; no special command is needed. Do not discuss reports in public."
+msgstr "Bienvenue sur %s. Envoyez un message privé à %s pour déposer un signalement. Décrivez ce qui s'est passé ; aucune commande particulière n'est nécessaire. Ne discutez pas des signalements en public."
 
 #, c-format
 msgid "%s — opener %s has disconnected; the ticket stays open."
@@ -168,8 +181,8 @@ msgstr "pseudo [#salon] raison"
 msgid "Use %s to file a report."
 msgstr "Utilisez %s pour déposer un signalement."
 
-msgid "Files a report against a nickname. Do not discuss the report in a public channel. The ticket is created as soon as the reason is clear; extra evidence can be sent afterwards as private messages. The reported user is not notified."
-msgstr "Dépose un signalement contre un pseudo. N'en discutez pas dans un salon public. Le ticket est créé dès que le motif est clair ; les preuves supplémentaires peuvent être envoyées ensuite en messages privés. La personne signalée n'est pas prévenue."
+msgid "You can also just describe the report in a private message; a ticket opens automatically once the nickname and the facts are clear. Do not discuss the report in a public channel. Extra evidence can be sent afterwards as private messages. The reported user is not notified."
+msgstr "Vous pouvez aussi simplement décrire le signalement en message privé ; un ticket s'ouvre automatiquement une fois le pseudo et les faits connus. N'en discutez pas dans un salon public. Les preuves supplémentaires peuvent être envoyées ensuite en messages privés. La personne signalée n'est pas prévenue."
 
 msgid "List tickets"
 msgstr "Lister les tickets"
