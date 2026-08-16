@@ -26,6 +26,13 @@ namespace
 		return "";
 	}
 
+	Anope::string TicketNoticePrefix(const Anope::string &queue, unsigned id)
+	{
+		if (queue.equals_ci(QUEUE_REPORT))
+			return Anope::Format(Language::Translate(_("Report: ticket \002#%u\002")), id);
+		return Anope::Format(Language::Translate(_("Help request: ticket \002#%u\002")), id);
+	}
+
 	Anope::string ChannelNameFromSpec(const Anope::string &spec)
 	{
 		size_t h = spec.find('#');
@@ -184,6 +191,60 @@ namespace
 		}
 		remaining.trim();
 		return remaining.length() >= min_len;
+	}
+
+	bool ContainsPadded(const Anope::string &hay, const Anope::string &needle)
+	{
+		if (hay.empty() || needle.empty())
+			return false;
+		return (" " + hay + " ").find(" " + needle + " ") != Anope::string::npos;
+	}
+
+	bool ContainsAnyPadded(const Anope::string &hay, const std::vector<Anope::string> &needles)
+	{
+		for (const auto &needle : needles)
+		{
+			if (ContainsPadded(hay, needle))
+				return true;
+		}
+		return false;
+	}
+
+	bool LooksLikeIncident(const Anope::string &folded)
+	{
+		static const char *const phrases[] = {
+			"narrive pas", "narrive plus", "yarrive pas", "yarrive plus", "arrive pas", "arrive plus",
+			"peux pas", "peut pas", "plus possible", "impossible",
+			"marche pas", "marche plus", "fonctionne pas", "fonctionne plus",
+			"erreur", "bug", "crash", "plante", "probleme", "souci",
+			"vole", "volee", "derobe", "derobee",
+			"banni", "kline", "gline", "akill", "shun",
+			"mot de passe", "password",
+			"usurpe", "usurpee",
+			"nick pris", "pseudo pris", "pseudo vole",
+		};
+		for (const char *phrase : phrases)
+		{
+			if (ContainsPadded(folded, phrase))
+				return true;
+		}
+		return false;
+	}
+
+	bool LooksLikeHowTo(const Anope::string &folded)
+	{
+		static const char *const phrases[] = {
+			"comment", "comment faire", "comment utiliser", "comment march", "comment fonctionne",
+			"cest quoi", "quest ce", "ca sert a quoi", "a quoi sert",
+			"tuto", "tutoriel", "documentation", "guide", "utilisation",
+			"lien", "url", "page daide", "site daide", "ou trouver", "aide pour",
+		};
+		for (const char *phrase : phrases)
+		{
+			if (ContainsPadded(folded, phrase))
+				return true;
+		}
+		return false;
 	}
 
 	Anope::string FirstToken(const Anope::string &message)
@@ -491,6 +552,13 @@ public:
 	}
 };
 
+struct HelpAutoReply final
+{
+	std::vector<Anope::string> keys;
+	Anope::string reply;
+	bool general = false;
+};
+
 struct TriageState final
 {
 	Anope::string queue;
@@ -501,6 +569,7 @@ struct TriageState final
 	Anope::string summary;
 	std::vector<Anope::string> notes;
 	time_t started = 0;
+	bool faq_sent = false;
 };
 
 class ModuleHelpServ;
@@ -536,6 +605,7 @@ class ModuleHelpServ
 	Anope::string help_greeting;
 	bool require_account_report = true;
 	unsigned min_request_len = 12;
+	std::vector<HelpAutoReply> auto_replies;
 
 	Reference<BotInfo> StaffBot;
 	Reference<BotInfo> AideBot;
@@ -831,6 +901,7 @@ public:
 		help_greeting = help.Get<const Anope::string>("greeting");
 		require_account_report = report.Get<bool>("require_account", "yes");
 		min_request_len = block.Get<unsigned>("min_request_len", "12");
+		LoadAutoReplies(help);
 
 		new BindTimer(this);
 	}
@@ -1011,9 +1082,8 @@ public:
 		Anope::string who = t->opener_nick;
 		if (!t->opener_account.empty())
 			who += " (" + t->opener_account + ")";
-		const char *nfmt = Language::Translate(_("[\002%s #%u\002] %s: %s"));
-		Anope::string nmsg = Anope::Format(nfmt, queue.c_str(), t->id, who.c_str(), t->summary.c_str());
-		NotifyStaff(nmsg);
+		const char *nfmt = Language::Translate(_("%s — %s: %s"));
+		NotifyStaff(Anope::Format(nfmt, TicketNoticePrefix(queue, t->id).c_str(), who.c_str(), t->summary.c_str()));
 		return t;
 	}
 
@@ -1022,8 +1092,8 @@ public:
 		t->AddLine('U', u->nick, text);
 		u->SendMessage(bi, _("Your message has been added to ticket \002#%u\002."), t->id);
 
-		const char *ufmt = Language::Translate(_("[\002%s #%u\002] update from %s: %s"));
-		NotifyStaff(Anope::Format(ufmt, t->queue.c_str(), t->id, u->nick.c_str(), text.c_str()));
+		const char *ufmt = Language::Translate(_("%s — update from %s: %s"));
+		NotifyStaff(Anope::Format(ufmt, TicketNoticePrefix(t->queue, t->id).c_str(), u->nick.c_str(), text.c_str()));
 
 		if (!t->status.equals_ci(STATUS_ASSIGNED) || t->assignee.empty())
 			return;
@@ -1045,6 +1115,122 @@ public:
 			helper->SendMessage(StaffBot, _("Ticket \002#%u\002 new message from %s: %s"), t->id, u->nick.c_str(), text.c_str());
 	}
 
+	void AddAutoReply(const Anope::string &match, const Anope::string &reply, bool general)
+	{
+		HelpAutoReply item;
+		item.reply = reply.replace_all_cs("\\n", "\n");
+		item.general = general;
+		commasepstream cs(match);
+		for (Anope::string tok; cs.GetToken(tok);)
+		{
+			tok.trim();
+			tok = FoldTriageText(tok);
+			if (!tok.empty())
+				item.keys.push_back(tok);
+		}
+		if (!item.keys.empty() && !item.reply.empty())
+			auto_replies.push_back(item);
+	}
+
+	void LoadAutoReplies(const Configuration::Block &help)
+	{
+		auto_replies.clear();
+		AddAutoReply("webchat, kiwi, kiwiirc, qwebirc, thelounge",
+			"Le webchat : https://www.reseau-entrenous.fr/aide/webchat/", false);
+		AddAutoReply("nickserv, identify, grouper, ghost, recover, release, enregistrer mon pseudo, enregistrer un pseudo, enregistrer mon nick",
+			"Les services des pseudos NickServ : https://www.reseau-entrenous.fr/aide/nickserv/", false);
+		AddAutoReply("gaya, salon personnel, salons personnels, bot des salons",
+			"Le bot des salons personnels Gaya : https://www.reseau-entrenous.fr/aide/gaya/", false);
+		AddAutoReply("bouncer, bnc, znc, aide serveur, fonctionnement du serveur, commandes serveur, modes serveur",
+			"Comprendre le fonctionnement du serveur de tchat EntreNous : https://www.reseau-entrenous.fr/aide/aide-serveur/", false);
+		AddAutoReply("utilisation, documentation, tutoriel, tuto, guide, aide en ligne, comment ca marche, comment fonctionne, site daide, reseau entrenous, entrenous.fr/aide, tchat, le tchat",
+			"Besoin d'aide? Visitez https://www.reseau-entrenous.fr/aide/ pour trouver de l'aide à l'utilisation du tchat EntreNous.\n"
+			"Le webchat : https://www.reseau-entrenous.fr/aide/webchat/\n"
+			"Les services des pseudos NickServ : https://www.reseau-entrenous.fr/aide/nickserv/\n"
+			"Le bot des salons personnels Gaya : https://www.reseau-entrenous.fr/aide/gaya/\n"
+			"Comprendre le fonctionnement du serveur de tchat EntreNous : https://www.reseau-entrenous.fr/aide/aide-serveur/",
+			true);
+
+		for (const auto &[_, ab] : help.GetBlocks("auto"))
+		{
+			AddAutoReply(ab.Get<const Anope::string>("match"),
+				ab.Get<const Anope::string>("reply"),
+				ab.Get<bool>("general", "no"));
+		}
+	}
+
+	void SendDocLines(User *u, BotInfo *bi, const Anope::string &text)
+	{
+		if (!u || !bi || text.empty())
+			return;
+		sepstream sep(text, '\n');
+		for (Anope::string line; sep.GetToken(line);)
+		{
+			line.trim();
+			if (!line.empty())
+				u->SendMessage(bi, "%s", line.c_str());
+		}
+	}
+
+	bool TryDocReply(User *u, BotInfo *bi, const Anope::string &message, TriageState &st)
+	{
+		if (auto_replies.empty())
+			return false;
+
+		Anope::string folded = FoldTriageText(message);
+		if (folded.empty() || LooksLikeIncident(folded))
+			return false;
+
+		bool howto = LooksLikeHowTo(folded);
+		const HelpAutoReply *general = nullptr;
+		std::vector<const HelpAutoReply *> specific;
+		for (const auto &item : auto_replies)
+		{
+			if (!ContainsAnyPadded(folded, item.keys))
+				continue;
+			if (item.general)
+			{
+				if (howto)
+					general = &item;
+				continue;
+			}
+			specific.push_back(&item);
+		}
+
+		if (!general && specific.empty())
+		{
+			if (!howto)
+				return false;
+			for (const auto &item : auto_replies)
+			{
+				if (item.general)
+				{
+					general = &item;
+					break;
+				}
+			}
+			if (!general)
+				return false;
+		}
+
+		if (st.faq_sent)
+		{
+			u->SendMessage(bi, _("If the help pages are not enough, describe the exact problem (what you tried and any error) so we can open a ticket."));
+			return true;
+		}
+
+		if (general)
+			SendDocLines(u, bi, general->reply);
+		else
+		{
+			for (const auto *item : specific)
+				SendDocLines(u, bi, item->reply);
+		}
+		u->SendMessage(bi, _("If that does not solve it, describe the exact problem (what you tried and the error) and a ticket will be opened."));
+		st.faq_sent = true;
+		return true;
+	}
+
 	void HandleHelpDialogue(User *u, BotInfo *bi, const Anope::string &message)
 	{
 		if (auto *existing = AideTicket::FindOpenFor(u, QUEUE_HELP))
@@ -1061,6 +1247,9 @@ public:
 			st.step = 0;
 		}
 		st.notes.push_back(message);
+
+		if (TryDocReply(u, bi, message, st))
+			return;
 
 		if (!LooksLikeRequest(message, min_request_len))
 		{
@@ -1256,8 +1445,8 @@ public:
 				&& !(u->Account() && t->opener_account.equals_ci(u->Account()->display)))
 				continue;
 			t->AddLine('S', u->nick, "opener left " + c->name);
-			const char *pfmt = Language::Translate(_("[\002%s #%u\002] opener %s has left %s; the ticket stays open."));
-			NotifyStaff(Anope::Format(pfmt, t->queue.c_str(), t->id, u->nick.c_str(), c->name.c_str()));
+			const char *pfmt = Language::Translate(_("%s — opener %s has left %s; the ticket stays open."));
+			NotifyStaff(Anope::Format(pfmt, TicketNoticePrefix(t->queue, t->id).c_str(), u->nick.c_str(), c->name.c_str()));
 		}
 	}
 
@@ -1273,8 +1462,8 @@ public:
 			if (t->opener_uid.equals_ci(u->GetUID()))
 			{
 				t->AddLine('S', u->nick, "opener quit");
-				const char *qfmt = Language::Translate(_("[\002%s #%u\002] opener %s has disconnected; the ticket stays open."));
-				NotifyStaff(Anope::Format(qfmt, t->queue.c_str(), t->id, u->nick.c_str()));
+				const char *qfmt = Language::Translate(_("%s — opener %s has disconnected; the ticket stays open."));
+				NotifyStaff(Anope::Format(qfmt, TicketNoticePrefix(t->queue, t->id).c_str(), u->nick.c_str()));
 			}
 		}
 	}
@@ -1434,8 +1623,8 @@ public:
 					helper.c_str(), t->id, desk.c_str());
 		}
 		VoiceOpener(t, true);
-		const char *afmt = Language::Translate(_("[\002%s #%u\002] assigned to %s by %s"));
-		NotifyStaff(Anope::Format(afmt, t->queue.c_str(), t->id, helper.c_str(), source.GetNick().c_str()));
+		const char *afmt = Language::Translate(_("%s — assigned to %s by %s"));
+		NotifyStaff(Anope::Format(afmt, TicketNoticePrefix(t->queue, t->id).c_str(), helper.c_str(), source.GetNick().c_str()));
 	}
 
 	unsigned OpenCount(const Anope::string &queue, const Anope::string &opener_nick, const Anope::string &opener_account, const Anope::string &opener_uid) const
@@ -1545,8 +1734,8 @@ public:
 		t->AddLine('S', u->nick, "cancelled");
 		mod->DevoiceOpener(t);
 		source.Reply(_("Ticket \002#%u\002 has been cancelled."), t->id);
-		const char *cfmt = Language::Translate(_("[\002%s #%u\002] cancelled by %s"));
-		mod->NotifyStaff(Anope::Format(cfmt, t->queue.c_str(), t->id, u->nick.c_str()));
+		const char *cfmt = Language::Translate(_("%s — cancelled by %s"));
+		mod->NotifyStaff(Anope::Format(cfmt, TicketNoticePrefix(t->queue, t->id).c_str(), u->nick.c_str()));
 	}
 
 	bool OnHelp(CommandSource &source, const Anope::string &) override
@@ -1893,8 +2082,8 @@ public:
 					opener->SendMessage(userbot, _("Your ticket \002#%u\002 has been closed: %s"), t->id, reason.c_str());
 			}
 		}
-		const char *clfmt = Language::Translate(_("[\002%s #%u\002] closed by %s (%s)"));
-		MeHelpServ->NotifyStaff(Anope::Format(clfmt, t->queue.c_str(), t->id, source.GetNick().c_str(), t->close_reason.c_str()));
+		const char *clfmt = Language::Translate(_("%s — closed by %s (%s)"));
+		MeHelpServ->NotifyStaff(Anope::Format(clfmt, TicketNoticePrefix(t->queue, t->id).c_str(), source.GetNick().c_str(), t->close_reason.c_str()));
 	}
 
 	bool OnHelp(CommandSource &source, const Anope::string &) override

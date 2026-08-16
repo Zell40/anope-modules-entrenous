@@ -19,8 +19,16 @@ msgid "Ticket #%u is now open. A helper will take it as soon as possible. You 
 msgstr "Le ticket #%u est maintenant ouvert. Un membre de l'équipe va s'en occuper dès que possible. Vous pouvez continuer à envoyer des messages ici ; ils seront ajoutés au ticket."
 
 #, c-format
-msgid "[%s #%u] %s: %s"
-msgstr "[%s #%u] %s : %s"
+msgid "Help request: ticket #%u"
+msgstr "Demande d'aide : ticket #%u"
+
+#, c-format
+msgid "Report: ticket #%u"
+msgstr "Signalement : ticket #%u"
+
+#, c-format
+msgid "%s — %s: %s"
+msgstr "%s — %s : %s"
 
 #, c-format
 msgid "Your message has been added to ticket #%u."
@@ -31,14 +39,20 @@ msgid "Ticket #%u new message from %s: %s"
 msgstr "Ticket #%u nouveau message de %s : %s"
 
 #, c-format
-msgid "[%s #%u] update from %s: %s"
-msgstr "[%s #%u] mise à jour de %s : %s"
+msgid "%s — update from %s: %s"
+msgstr "%s — mise à jour de %s : %s"
 
 msgid "Hello, I am the help bot. A ticket is only opened once we know what you need. Please describe your problem (nick, channel, connection, or something else)."
 msgstr "Bonjour, je suis le robot d'aide. Un ticket n'est ouvert qu'une fois que l'on sait de quoi vous avez besoin. Décrivez votre problème (pseudo, salon, connexion, ou autre)."
 
 msgid "Could you give a little more detail so the team can help you? For example what you tried, and what error you see."
 msgstr "Pouvez-vous donner un peu plus de détails pour que l'équipe puisse vous aider ? Par exemple ce que vous avez essayé, et l'erreur que vous voyez."
+
+msgid "If that does not solve it, describe the exact problem (what you tried and the error) and a ticket will be opened."
+msgstr "Si cela ne suffit pas, décrivez le problème précis (ce que vous avez essayé et l'erreur) : un ticket sera alors ouvert."
+
+msgid "If the help pages are not enough, describe the exact problem (what you tried and any error) so we can open a ticket."
+msgstr "Si les pages d'aide ne suffisent pas, décrivez le problème précis (ce que vous avez essayé et l'erreur) pour qu'un ticket soit ouvert."
 
 msgid "Please describe what happened (where, when, and why you are reporting this person)."
 msgstr "Merci de décrire ce qui s'est passé (où, quand, et pourquoi vous signalez cette personne)."
@@ -85,12 +99,12 @@ msgid "Welcome to %s. Send a private message to %s to request help. A ticket i
 msgstr "Bienvenue sur %s. Envoyez un message privé à %s pour demander de l'aide. Un ticket n'est ouvert qu'une fois votre problème compris."
 
 #, c-format
-msgid "[%s #%u] opener %s has disconnected; the ticket stays open."
-msgstr "[%s #%u] %s s'est déconnecté ; le ticket reste ouvert."
+msgid "%s — opener %s has disconnected; the ticket stays open."
+msgstr "%s — %s s'est déconnecté ; le ticket reste ouvert."
 
 #, c-format
-msgid "[%s #%u] opener %s has left %s; the ticket stays open."
-msgstr "[%s #%u] %s a quitté %s ; le ticket reste ouvert."
+msgid "%s — opener %s has left %s; the ticket stays open."
+msgstr "%s — %s a quitté %s ; le ticket reste ouvert."
 
 #, c-format
 msgid "Ticket #%u assigned to %s."
@@ -105,8 +119,8 @@ msgid "Helper %s has taken your ticket #%u. Join %s to talk with them; you
 msgstr "L'aidant %s a pris votre ticket #%u. Rejoignez %s pour lui parler ; vous y recevrez le voice."
 
 #, c-format
-msgid "[%s #%u] assigned to %s by %s"
-msgstr "[%s #%u] attribué à %s par %s"
+msgid "%s — assigned to %s by %s"
+msgstr "%s — attribué à %s par %s"
 
 msgid "Show your ticket status / position in the queue"
 msgstr "Afficher l'état de votre ticket / votre position dans la file"
@@ -138,8 +152,8 @@ msgid "Ticket #%u has been cancelled."
 msgstr "Le ticket #%u a été annulé."
 
 #, c-format
-msgid "[%s #%u] cancelled by %s"
-msgstr "[%s #%u] annulé par %s"
+msgid "%s — cancelled by %s"
+msgstr "%s — annulé par %s"
 
 msgid "Cancels your ticket if no helper has taken it yet."
 msgstr "Annule votre ticket si aucun aidant ne l'a encore pris."
@@ -282,8 +296,8 @@ msgid "Your ticket #%u has been closed: %s"
 msgstr "Votre ticket #%u a été fermé : %s"
 
 #, c-format
-msgid "[%s #%u] closed by %s (%s)"
-msgstr "[%s #%u] fermé par %s (%s)"
+msgid "%s — closed by %s (%s)"
+msgstr "%s — fermé par %s (%s)"
 
 msgid "Closes a ticket. The opener is notified."
 msgstr "Ferme un ticket. Le demandeur est prévenu."
