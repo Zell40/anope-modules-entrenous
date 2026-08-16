@@ -1,8 +1,8 @@
-# French translations for AideServ (Anope third-party module).
+# French translations for HelpServ (Anope third-party module).
 # SPDX-License-Identifier: GPL-2.0-only
 msgid ""
 msgstr ""
-"Project-Id-Version: aideserv 1.0\n"
+"Project-Id-Version: helpserv 1.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-08-14 14:00+0200\n"
 "PO-Revision-Date: 2026-08-14 14:00+0200\n"
@@ -304,4 +304,30 @@ msgstr "Donne le ticket à un autre aidant."
 
 msgid "Helper commands"
 msgstr "Commandes de l'équipe"
+
+msgid "Add AideMoi or SignalMoi to a channel"
+msgstr "Ajouter AideMoi ou SignalMoi sur un salon"
+
+msgid "Remove AideMoi or SignalMoi from a channel"
+msgstr "Retirer AideMoi ou SignalMoi d'un salon"
+
+msgid "List HelpServ client bots and their channels"
+msgstr "Lister les bots HelpServ et leurs salons"
+
+#, c-format
+msgid "Use %s to handle tickets."
+msgstr "Utilisez %s pour traiter les tickets."
+
+#, c-format
+msgid "Bot %s cannot be assigned with BotServ. Use /msg %s JOIN %s %s."
+msgstr "Le bot %s ne peut pas être assigné avec BotServ. Utilisez /msg %s JOIN %s %s."
+
+#, c-format
+msgid "%s has been added to %s."
+msgstr "%s a été ajouté sur %s."
+
+#, c-format
+msgid "%s has been removed from %s."
+msgstr "%s a été retiré de %s."
+
 

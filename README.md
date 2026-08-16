@@ -20,5 +20,5 @@ Chaque module a son `*.example.conf` : copiez-le (ou incluez-le) depuis `anope.c
 
 | Dossier | Module Anope | Rôle |
 | --- | --- | --- |
-| [`aideserv/`](aideserv/) | `aideserv` | **AideServ** — files d’aide (`AideMoi`) et de signalement (`SignalMoi`) |
+| [`helpserv/`](helpserv/) | `helpserv` | **HelpServ** (ops) + bots **AideMoi** / **SignalMoi** |
 | [`m_youtube/`](m_youtube/) | `m_youtube` | BotServ — titre / durée / vues des liens YouTube |
