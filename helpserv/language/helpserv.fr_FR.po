@@ -45,20 +45,6 @@ msgstr "%s — mise à jour de %s : %s"
 msgid "Hello, I am the help bot. A ticket is only opened once we know what you need. Please describe your problem (nick, channel, connection, or something else)."
 msgstr "Bonjour, je suis le robot d'aide. Un ticket n'est ouvert qu'une fois que l'on sait de quoi vous avez besoin. Décrivez votre problème (pseudo, salon, connexion, ou autre)."
 
-#, c-format
-msgid "Hello %s, how can I help you?"
-msgstr "Bonjour %s, comment puis-je vous aider ?"
-
-msgid "If these pages are not enough, describe your problem (nick, channel, connection, error): a ticket is opened only once your request is clear."
-msgstr "Si ces pages ne suffisent pas, décrivez votre problème (pseudo, salon, connexion, erreur) : un ticket sera ouvert uniquement quand la demande sera claire."
-
-#, c-format
-msgid "Hello %s. As soon as you have sent your first message describing the report, the team will respond quickly. Do not discuss reports in public."
-msgstr "Bonjour %s. Dès que vous aurez envoyé votre premier message décrivant le signalement, l'équipe interviendra rapidement. Ne discutez pas des signalements en public."
-
-msgid "To file a report, type REPORT nick [#channel] reason (or SIGNALER). After the ticket is open, send any evidence here by private message."
-msgstr "Pour déposer un signalement, tapez REPORT pseudo [#salon] raison (ou SIGNALER). Une fois le ticket ouvert, envoyez les preuves ici en message privé."
-
 msgid "Could you give a little more detail so the team can help you? For example what you tried, and what error you see."
 msgstr "Pouvez-vous donner un peu plus de détails pour que l'équipe puisse vous aider ? Par exemple ce que vous avez essayé, et l'erreur que vous voyez."
 
@@ -73,8 +59,6 @@ msgstr "Merci de décrire ce qui s'est passé (où, quand, et pourquoi vous sign
 
 msgid "To file a report, type REPORT nick [#channel] reason (or SIGNALER). Do not discuss reports in public. After the ticket is open, send any evidence here by private message."
 msgstr "Pour déposer un signalement, tapez REPORT pseudo [#salon] raison (ou SIGNALER). Ne discutez pas des signalements en public. Une fois le ticket ouvert, envoyez les preuves ici en message privé."
-
-# Legacy combined report help (kept for older binaries).
 
 #, c-format
 msgid "You already have open report ticket #%u. Your message has been added to it."

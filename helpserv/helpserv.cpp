@@ -1231,28 +1231,6 @@ public:
 		return true;
 	}
 
-	void SendAideMoiWelcome(User *u, BotInfo *bi)
-	{
-		if (!u || !bi)
-			return;
-		u->SendMessage(bi, _("Hello %s, how can I help you?"), u->nick.c_str());
-		SendDocLines(u, bi,
-			"Besoin d'aide? Visitez https://www.reseau-entrenous.fr/aide/ pour trouver de l'aide à l'utilisation du tchat EntreNous.\n"
-			"Le webchat : https://www.reseau-entrenous.fr/aide/webchat/\n"
-			"Les services des pseudos NickServ : https://www.reseau-entrenous.fr/aide/nickserv/\n"
-			"Le bot des salons personnels Gaya : https://www.reseau-entrenous.fr/aide/gaya/\n"
-			"Comprendre le fonctionnement du serveur de tchat EntreNous : https://www.reseau-entrenous.fr/aide/aide-serveur/");
-		u->SendMessage(bi, _("If these pages are not enough, describe your problem (nick, channel, connection, error): a ticket is opened only once your request is clear."));
-	}
-
-	void SendSignalMoiWelcome(User *u, BotInfo *bi)
-	{
-		if (!u || !bi)
-			return;
-		u->SendMessage(bi, _("Hello %s. As soon as you have sent your first message describing the report, the team will respond quickly. Do not discuss reports in public."), u->nick.c_str());
-		u->SendMessage(bi, _("To file a report, type \002REPORT \037nick\037 [\037#channel\037] \037reason\037\002 (or \002SIGNALER\002). After the ticket is open, send any evidence here by private message."));
-	}
-
 	void HandleHelpDialogue(User *u, BotInfo *bi, const Anope::string &message)
 	{
 		if (auto *existing = AideTicket::FindOpenFor(u, QUEUE_HELP))
@@ -1262,8 +1240,7 @@ public:
 		}
 
 		auto &st = triages[u->GetUID()];
-		const bool first = !st.started;
-		if (first)
+		if (!st.started)
 		{
 			st.queue = QUEUE_HELP;
 			st.started = Anope::CurTime;
@@ -1276,14 +1253,9 @@ public:
 
 		if (!LooksLikeRequest(message, min_request_len))
 		{
-			// Pre-ticket welcome (nick + EntreNous help links). Orbit may already
-			// have shown this when the query opened; still send here for other clients.
-			if (!st.faq_sent)
-			{
-				SendAideMoiWelcome(u, bi);
-				st.faq_sent = true;
-			}
-			else if (!(first && IsGreeting(message)))
+			if (IsGreeting(message) && st.step == 0)
+				u->SendMessage(bi, _("Hello, I am the help bot. A ticket is only opened once we know what you need. Please describe your problem (nick, channel, connection, or something else)."));
+			else
 				u->SendMessage(bi, _("Could you give a little more detail so the team can help you? For example what you tried, and what error you see."));
 			++st.step;
 			return;
@@ -1320,7 +1292,7 @@ public:
 			return;
 		}
 
-		SendSignalMoiWelcome(u, bi);
+		u->SendMessage(bi, _("To file a report, type \002REPORT \037nick\037 [\037#channel\037] \037reason\037\002 (or \002SIGNALER\002). Do not discuss reports in public. After the ticket is open, send any evidence here by private message."));
 	}
 
 	void StartReport(User *u, BotInfo *bi, const Anope::string &target, const Anope::string &chan, const Anope::string &reason)
