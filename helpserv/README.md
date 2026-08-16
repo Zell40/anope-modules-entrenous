@@ -22,14 +22,22 @@ Les tickets ouverts via AideMoi ou SignalMoi sont toujours notifiés par **HelpS
 
 2. Reconstruire Anope (`./Config`, `make`, `make install`).
 
-3. Inclure `helpserv.example.conf` depuis `anope.conf`.
+3. Copier `helpserv.example.conf` vers `conf/helpserv.conf` (comme `botserv.conf`), puis dans `anope.conf` :
 
-4. Charger le module : `module { name = "helpserv" }` (déjà dans l’exemple).
+   ```
+   include
+   {
+   	type = "file"
+   	name = "helpserv.conf"
+   }
+   ```
 
-Les personnes présentes sur `#_BO` ont les commandes d’équipe. Pour un opertype :
+   Le `module { name = "helpserv" }` et les `service { }` sont déjà dans ce fichier. Ne pas coller le `anope.example.conf` d’une version plus récente d’Anope par-dessus la conf EntreNous.
+
+Les personnes présentes sur `#_BO` ont les commandes d’équipe. Pour un opertype (ex. Helpeur) :
 
 ```
-commands = "helpserv/helper"
+commands = "hostserv/* helpserv/helper"
 ```
 
 ## Commandes opérateurs (`/msg HelpServ`)

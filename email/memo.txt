@@ -1,0 +1,15 @@
+Bonjour {receiver},
+
+Vous venez de recevoir un message de {sender}. Ce message porte le numéro {number}.
+
+Texte du message :
+
+{text}
+
+L'espace Gérer mes services Reseau-EntreNous permet de répondre :
+https://services.reseau-entrenous.fr
+Une fois connecté, cliquez sur "Message" dans le menu.
+
+L'équipe {network}
+Site : https://www.reseau-entrenous.fr
+E-mail : contact@reseau-entrenous.fr

@@ -16,6 +16,8 @@ make install
 
 Chaque module a son `*.example.conf` : copiez-le (ou incluez-le) depuis `anope.conf`.
 
+Les modèles d’e-mail FR (format `mail { memo { … } }` d’Anope 2.1 récent) sont dans [`email/`](email/). Copiez-les vers `conf/email/` de l’installation.
+
 ## Modules
 
 | Dossier | Module Anope | Rôle |

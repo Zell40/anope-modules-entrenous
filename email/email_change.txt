@@ -1,0 +1,13 @@
+Bonjour {account},
+
+Vous avez demandé à modifier votre adresse e-mail {old_email} vers {new_email}.
+
+Pour confirmer le changement, tapez ceci sur le tchat :
+
+/msg NickServ CONFIRM EMAIL {code}
+
+Si vous ne savez pas pourquoi cet e-mail vous a été envoyé, ignorez-le.
+
+L'équipe {network}
+Site : https://www.reseau-entrenous.fr
+E-mail : contact@reseau-entrenous.fr

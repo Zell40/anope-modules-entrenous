@@ -1,0 +1,32 @@
+Bonjour,
+
+Vous avez demandé d'enregistrer le pseudo {nick} sur le tchat {network}.
+
+Le code de confirmation pour valider votre email est celui-ci : {code}
+
+Pour finaliser l'enregistrement de votre compte, plusieurs solutions s'offrent à vous :
+
+1) Depuis l'application Mes Services Reseau-EntreNous :
+   https://services.reseau-entrenous.fr/
+
+   Entrez l'identifiant et le mot de passe choisis à l'enregistrement.
+   Une fois authentifié, cliquez sur NickServ / Confirmation.
+   Entrez le code ci-dessus puis cliquez sur "Je confirme !".
+
+2) Depuis le Webchat :
+   Si vous avez enregistré votre pseudo via le Webchat, tapez le code
+   de vérification à l'emplacement demandé.
+
+3) Depuis le tchat, copiez-collez :
+
+   /msg NickServ CONFIRM REGISTER {code}
+
+Besoin d'aide ?
+- salon #Aide.chat
+- https://www.reseau-entrenous.fr/aide/nickserv/
+
+Si vous ne savez pas pourquoi cet e-mail vous a été envoyé, ignorez-le.
+
+L'équipe {network}
+Site : https://www.reseau-entrenous.fr
+E-mail : contact@reseau-entrenous.fr
