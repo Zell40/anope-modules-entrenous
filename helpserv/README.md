@@ -68,7 +68,11 @@ Alias FR : `LISTE`, `SUIVANT`, `PRENDRE`, `VOIR`, `FERMER`, `NOTE`, `REASSIGNER`
 - AideMoi : `WAIT` / `ATTENDRE`, `STATUS` / `STATUT`, `CANCEL` / `ANNULER`
 - SignalMoi : les mêmes, plus `REPORT` / `SIGNALER`
 
-Un ticket n’est **pas** ouvert sur un salut ou une demande vide (« j’ai besoin d’aide », « aidez-moi », « help »). AideMoi redemande le problème (pseudo, salon, connexion, erreur). Le ticket s’ouvre seulement quand il reste une vraie description. Les messages de triage restent dans l’historique du ticket. `QUIT` pendant ce dialogue abandonne le triage (aucun ticket).
+Un ticket n’est **pas** ouvert sur un salut ou une demande vide (« j’ai besoin d’aide », « aidez-moi », « help »). Au premier contact, AideMoi envoie un accueil personnalisé avec les liens d’aide EntreNous, puis redemande le problème (pseudo, salon, connexion, erreur). Le ticket s’ouvre seulement quand il reste une vraie description. Les messages de triage restent dans l’historique du ticket. `QUIT` pendant ce dialogue abandonne le triage (aucun ticket).
+
+Sur le webchat Orbit, le plugin `orbit-helpserv-welcome` affiche le même accueil dès l’ouverture du PV (avant même le premier message).
+
+SignalMoi accueille aussi au premier contact : l’équipe intervient rapidement après le premier message de signalement.
 
 Les questions d’utilisation reçoivent d’abord les pages d’aide EntreNous (webchat, NickServ, Gaya, serveur, aide générale) sans ticket. Un incident (erreur, nick pris, « je n’arrive pas… ») ouvre toujours un ticket. D’autres réponses auto peuvent être ajoutées dans `helpserv.conf` (`help { auto { match; reply } }`).
 
