@@ -788,6 +788,7 @@ class ModuleHelpServ
 	unsigned reg_per_day = 15;
 	unsigned unreg_cooldown = 180;
 	unsigned ip_per_hour = 8;
+	time_t ticket_expire = 0;
 	std::vector<HelpAutoReply> auto_replies;
 
 	Reference<BotInfo> StaffBot;
@@ -1008,7 +1009,7 @@ public:
 	{
 		MeHelpServ = this;
 		SetAuthor("EntreNous");
-		SetVersion("1.2");
+		SetVersion("1.3");
 		ModuleManager::SetPriority(this, I_OnInvite, PRIORITY_LAST);
 	}
 
@@ -1092,6 +1093,7 @@ public:
 		reg_per_day = block.Get<unsigned>("reg_per_day", "15");
 		unreg_cooldown = block.Get<unsigned>("unreg_cooldown", "180");
 		ip_per_hour = block.Get<unsigned>("ip_per_hour", "8");
+		ticket_expire = block.Get<time_t>("ticket_expire", "7d");
 		LoadAutoReplies(help);
 
 		new BindTimer(this);
@@ -1100,6 +1102,56 @@ public:
 	void OnPostInit() override
 	{
 		BindAll();
+	}
+
+	void ExpireOpenTicket(AideTicket *t)
+	{
+		if (!t || t->status.equals_ci(STATUS_CLOSED))
+			return;
+		t->status = STATUS_CLOSED;
+		t->closed = Anope::CurTime;
+		t->close_reason = "expired";
+		t->AddLine('S', staff_nick, "expired");
+		DevoiceOpener(t);
+		User *opener = FindOpener(t);
+		BotInfo *userbot = BotForQueue(t->queue);
+		if (opener && userbot)
+			opener->SendMessage(userbot, _("Your ticket \002#%u\002 has expired because it was inactive."), t->id);
+		const char *fmt = Language::Translate(_("%s — expired (inactive)"));
+		NotifyStaff(Anope::Format(fmt, TicketNoticePrefix(t->queue, t->id).c_str()));
+	}
+
+	void OnExpireTick() override
+	{
+		if (!ticket_expire || Anope::NoExpire || Anope::ReadOnly)
+			return;
+
+		for (size_t i = 0; i < Tickets.size(); )
+		{
+			AideTicket *t = Tickets[i];
+			if (!t)
+			{
+				++i;
+				continue;
+			}
+
+			if (t->status.equals_ci(STATUS_CLOSED))
+			{
+				time_t since = t->closed ? t->closed : (t->updated ? t->updated : t->opened);
+				if (since && Anope::CurTime - since >= ticket_expire)
+				{
+					delete t;
+					continue;
+				}
+			}
+			else
+			{
+				time_t since = t->updated ? t->updated : t->opened;
+				if (since && Anope::CurTime - since >= ticket_expire)
+					ExpireOpenTicket(t);
+			}
+			++i;
+		}
 	}
 
 	EventReturn OnPreCommand(CommandSource &source, Command *command, std::vector<Anope::string> &params) override

@@ -338,6 +338,14 @@ msgstr "Votre ticket #%u a été fermé : %s"
 msgid "%s — closed by %s (%s)"
 msgstr "%s — fermé par %s (%s)"
 
+#, c-format
+msgid "Your ticket #%u has expired because it was inactive."
+msgstr "Votre ticket #%u a expiré faute d'activité."
+
+#, c-format
+msgid "%s — expired (inactive)"
+msgstr "%s — expiré (inactif)"
+
 msgid "Closes a ticket. The opener is notified."
 msgstr "Ferme un ticket. Le demandeur est prévenu."
 

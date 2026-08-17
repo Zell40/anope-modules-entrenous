@@ -77,3 +77,5 @@ Les questions d’utilisation reçoivent d’abord les pages d’aide EntreNous 
 Quand un aidant prend un ticket (`NEXT` / `PICKUP`), l’ouvreur est prévenu en message privé (AideMoi ou SignalMoi). S’il est déjà sur `#Aide.chat` ou `#Signalement.chat`, il reçoit le voice (`+v`). Sinon il est invité sur le salon ; le voice est posé dès qu’il rejoint.
 
 Un `PART` / kick du salon d’aide, ou un `QUIT`, n’annule pas le ticket : l’équipe est prévenue et le ticket reste ouvert. Au retour, si le ticket est encore attribué, le voice est remis. `CLOSE` retire le voice.
+
+Les tickets inactifs sont fermés automatiquement après `ticket_expire` (7 jours par défaut). Les tickets déjà fermés sont ensuite effacés de la base après le même délai. Mettre `ticket_expire = 0` pour désactiver.
