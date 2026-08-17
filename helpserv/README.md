@@ -32,7 +32,7 @@ Les tickets ouverts via AideMoi ou SignalMoi sont toujours notifiés par **HelpS
    }
    ```
 
-   Le `module { name = "helpserv" }` et les `service { }` sont déjà dans ce fichier. Ne pas coller le `anope.example.conf` d’une version plus récente d’Anope par-dessus la conf EntreNous.
+   Le `module { name = "helpserv" }` et les `service { }` sont déjà dans ce fichier. Dans `anope.conf`, n’ajoute **que** l’include ci-dessus : un second `module { name = "helpserv" }` (vide) ferait ignorer tout `helpserv.conf` (noms réels, préfixes, anti-spam). Ne pas coller le `anope.example.conf` d’une version plus récente d’Anope par-dessus la conf EntreNous.
 
 Les personnes présentes sur `#_BO` ont les commandes d’équipe. Pour un opertype (ex. Helpeur) :
 

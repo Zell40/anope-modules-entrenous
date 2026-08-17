@@ -100,6 +100,50 @@ namespace
 		chan = in.substr(h);
 	}
 
+	ChannelMode *FindStatusMode(char want)
+	{
+		ChannelMode *cm = ModeManager::FindChannelModeByChar(want);
+		if (!cm)
+			cm = ModeManager::FindChannelModeByChar(ModeManager::GetStatusChar(want));
+		if (cm && cm->type == MODE_STATUS)
+			return cm;
+		const char *name = nullptr;
+		switch (want)
+		{
+			case '~':
+			case 'q':
+			case 'Q':
+				name = "OWNER";
+				break;
+			case '&':
+			case 'a':
+			case 'A':
+				name = "PROTECT";
+				break;
+			case '@':
+			case 'o':
+			case 'O':
+				name = "OP";
+				break;
+			case '%':
+			case 'h':
+			case 'H':
+				name = "HALFOP";
+				break;
+			case '+':
+			case 'v':
+			case 'V':
+				name = "VOICE";
+				break;
+			default:
+				break;
+		}
+		if (!name)
+			return nullptr;
+		cm = ModeManager::FindChannelModeByName(name);
+		return (cm && cm->type == MODE_STATUS) ? cm : nullptr;
+	}
+
 	bool IsGreeting(const Anope::string &text)
 	{
 		Anope::string t = text;
@@ -911,19 +955,32 @@ class ModuleHelpServ
 
 		c->botchannel = true;
 		auto *memb = c->FindUser(bi);
+		std::vector<ChannelMode *> wanted;
+		for (char want_mode : want_modes)
+		{
+			if (ChannelMode *cm = FindStatusMode(want_mode))
+				wanted.push_back(cm);
+		}
+		for (auto *cm : wanted)
+			c->SetMode(bi, cm, bi->GetUID());
+		memb = c->FindUser(bi);
 		if (memb)
 		{
 			auto modes = memb->status.Modes();
 			for (auto *mode : modes)
-				c->RemoveMode(bi, mode, bi->GetUID());
-		}
-		for (char want_mode : want_modes)
-		{
-			ChannelMode *cm = ModeManager::FindChannelModeByChar(want_mode);
-			if (!cm)
-				cm = ModeManager::FindChannelModeByChar(ModeManager::GetStatusChar(want_mode));
-			if (cm && cm->type == MODE_STATUS)
-				c->SetMode(bi, cm, bi->GetUID());
+			{
+				bool keep = false;
+				for (auto *cm : wanted)
+				{
+					if (mode == cm)
+					{
+						keep = true;
+						break;
+					}
+				}
+				if (!keep)
+					c->RemoveMode(bi, mode, bi->GetUID());
+			}
 		}
 	}
 
@@ -940,6 +997,31 @@ class ModuleHelpServ
 		}
 		if (Channel *c = Channel::Find(chname))
 			bi->Part(c);
+	}
+
+	void EnsureHomeChannel(BotInfo *bi, const Anope::string &prefix, const Anope::string &channel)
+	{
+		if (!bi || channel.empty() || channel[0] != '#')
+			return;
+		Anope::string spec = prefix + channel;
+		for (auto &existing : bi->botchannels)
+		{
+			if (ChannelNameFromSpec(existing).equals_ci(channel))
+			{
+				existing = spec;
+				return;
+			}
+		}
+		bi->botchannels.push_back(spec);
+	}
+
+	void ApplyBotChannels(BotInfo *bi)
+	{
+		if (!bi)
+			return;
+		const std::vector<Anope::string> specs = bi->botchannels;
+		for (const auto &spec : specs)
+			JoinSpec(bi, spec);
 	}
 
 	Anope::string PrefixFor(BotInfo *bi)
@@ -996,13 +1078,58 @@ class ModuleHelpServ
 				bi->SetIdent(user);
 			if (!host.empty())
 				bi->host = host;
-			if (!real.empty())
-				bi->realname = real;
 			if (!modes.empty())
 				bi->botmodes = modes;
+			if (!real.empty() && !real.equals_cs(bi->realname))
+			{
+				bi->SetRealname(real);
+				if (bi->introduced && IRCD)
+					Uplink::Send(bi, "FNAME", bi->realname);
+			}
 		}
 		bi->conf = true;
 		return bi;
+	}
+
+	const Configuration::Block &FindOurModule(Configuration::Conf &conf)
+	{
+		const Configuration::Block *best = nullptr;
+		size_t best_score = 0;
+		for (const auto &[_, b] : conf.GetBlocks("module"))
+		{
+			if (!b.Get<const Anope::string>("name").equals_ci(this->name))
+				continue;
+			size_t score = b.GetItems().size() + b.CountBlock("help") * 50 + b.CountBlock("report") * 50;
+			if (score > best_score)
+			{
+				best_score = score;
+				best = &b;
+			}
+		}
+		return best ? *best : conf.GetModule(this);
+	}
+
+	void OverlayServiceIdent(Configuration::Conf &conf, const Anope::string &nick,
+		Anope::string &user, Anope::string &host, Anope::string &real, Anope::string &modes)
+	{
+		for (const auto &[_, s] : conf.GetBlocks("service"))
+		{
+			if (!s.Get<const Anope::string>("nick").equals_ci(nick))
+				continue;
+			const auto u = s.Get<const Anope::string>("user");
+			const auto h = s.Get<const Anope::string>("host");
+			const auto r = s.Get<const Anope::string>("real");
+			const auto m = s.Get<const Anope::string>("modes");
+			if (!u.empty())
+				user = u;
+			if (!h.empty())
+				host = h;
+			if (!r.empty())
+				real = r;
+			if (!m.empty())
+				modes = m;
+			break;
+		}
 	}
 
 	void BindUserCommands(BotInfo *bi, bool report)
@@ -1070,7 +1197,7 @@ public:
 	{
 		MeHelpServ = this;
 		SetAuthor("EntreNous");
-		SetVersion("1.5");
+		SetVersion("1.6");
 		ModuleManager::SetPriority(this, I_OnInvite, PRIORITY_LAST);
 	}
 
@@ -1102,12 +1229,14 @@ public:
 		BindUserCommands(AideBot, false);
 		BindUserCommands(ReportBot, true);
 
-		// HelpServ is the operator bot: staff + logs only.
-		JoinSpec(StaffBot, staff_prefix + staff_channel);
-		JoinSpec(StaffBot, staff_prefix + log_channel);
-		// User-facing bots stay on their public desks (and extra JOIN channels).
-		JoinSpec(AideBot, help_prefix + help_channel);
-		JoinSpec(ReportBot, report_prefix + report_channel);
+		// HelpServ is the operator bot: staff + logs, plus any extra service { channels }.
+		EnsureHomeChannel(StaffBot, staff_prefix, staff_channel);
+		EnsureHomeChannel(StaffBot, staff_prefix, log_channel);
+		EnsureHomeChannel(AideBot, help_prefix, help_channel);
+		EnsureHomeChannel(ReportBot, report_prefix, report_channel);
+		ApplyBotChannels(StaffBot);
+		ApplyBotChannels(AideBot);
+		ApplyBotChannels(ReportBot);
 
 		for (auto *j : ExtraJoins)
 		{
@@ -1119,7 +1248,7 @@ public:
 
 	void OnReload(Configuration::Conf &conf) override
 	{
-		const auto &block = conf.GetModule(this);
+		const auto &block = FindOurModule(conf);
 		const auto &help = block.GetBlock("help");
 		const auto &report = block.GetBlock("report");
 
@@ -1128,6 +1257,7 @@ public:
 		staff_host = block.Get<const Anope::string>("host", conf.GetBlock("serverinfo").Get<const Anope::string>("name"));
 		staff_real = block.Get<const Anope::string>("real", "Help desk");
 		staff_modes = block.Get<const Anope::string>("modes");
+		OverlayServiceIdent(conf, staff_nick, staff_user, staff_host, staff_real, staff_modes);
 
 		help_nick = help.Get<const Anope::string>("nick", "AideMoi");
 		report_nick = report.Get<const Anope::string>("nick", "SignalMoi");
@@ -1139,6 +1269,8 @@ public:
 		report_real = report.Get<const Anope::string>("real", "Report desk");
 		help_modes = help.Get<const Anope::string>("modes");
 		report_modes = report.Get<const Anope::string>("modes");
+		OverlayServiceIdent(conf, help_nick, help_user, help_host, help_real, help_modes);
+		OverlayServiceIdent(conf, report_nick, report_user, report_host, report_real, report_modes);
 		help_channel = ChannelNameFromSpec(help.Get<const Anope::string>("channel", "#Aide.chat"));
 		report_channel = ChannelNameFromSpec(report.Get<const Anope::string>("channel", "#Signalement.chat"));
 		staff_channel = ChannelNameFromSpec(block.Get<const Anope::string>("staff_channel", "#_BO"));
@@ -1166,6 +1298,19 @@ public:
 	void OnPostInit() override
 	{
 		BindAll();
+	}
+
+	void OnUplinkSync(Server *) override
+	{
+		ApplyBotChannels(StaffBot);
+		ApplyBotChannels(AideBot);
+		ApplyBotChannels(ReportBot);
+		for (auto *j : ExtraJoins)
+		{
+			BotInfo *bi = BotForQueue(j->queue);
+			if (bi)
+				JoinSpec(bi, j->spec);
+		}
 	}
 
 	void ExpireOpenTicket(AideTicket *t)
