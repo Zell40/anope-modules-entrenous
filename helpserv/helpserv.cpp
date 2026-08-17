@@ -1143,28 +1143,194 @@ class ModuleHelpServ
 		return false;
 	}
 
-	void TryLoadSidecar(Configuration::Conf &conf)
+	static Anope::string ExpandDefines(Configuration::Conf &conf, const Anope::string &in)
 	{
-		if (ModuleConfigLoaded(conf))
-			return;
+		Anope::string out;
+		for (size_t i = 0; i < in.length(); )
+		{
+			if (in[i] == '$' && i + 1 < in.length() && in[i + 1] == '{')
+			{
+				size_t e = in.find('}', i + 2);
+				if (e == Anope::string::npos)
+				{
+					out.push_back(in[i++]);
+					continue;
+				}
+				Anope::string var = in.substr(i + 2, e - (i + 2));
+				Anope::string val;
+				if (var.length() > 4 && var.substr(0, 4).equals_cs("env."))
+				{
+					if (const char *env = getenv(var.c_str() + 4))
+						val = env;
+				}
+				else
+				{
+					for (const auto &[_, def] : conf.GetBlocks("define"))
+					{
+						if (def.Get<const Anope::string>("name") == var)
+						{
+							val = def.Get<const Anope::string>("value");
+							break;
+						}
+					}
+				}
+				out += val;
+				i = e + 1;
+				continue;
+			}
+			out.push_back(in[i++]);
+		}
+		return out;
+	}
 
+	static Anope::string UnquoteValue(Anope::string v)
+	{
+		v.trim();
+		if (!v.empty() && v[v.length() - 1] == ';')
+		{
+			v.erase(v.length() - 1);
+			v.trim();
+		}
+		if (v.length() >= 2 && v[0] == '"' && v[v.length() - 1] == '"')
+			return v.substr(1, v.length() - 2);
+		return v;
+	}
+
+	/* Configuration::File is not CoreExport; third-party modules cannot construct it. */
+	void LoadSidecarServices(Configuration::Conf &conf)
+	{
 		static const char *const names[] = { "helpserv.conf", "helpserv.example.conf" };
 		for (const char *name : names)
 		{
-			Configuration::File f(name, false);
-			if (!Anope::IsFile(f.GetPath()))
+			const Anope::string path = Anope::ExpandConfig(name);
+			if (!Anope::IsFile(path))
 				continue;
-			try
+			FILE *fp = fopen(path.c_str(), "r");
+			if (!fp)
+				continue;
+
+			bool in_comment = false, pending_service = false, in_service = false;
+			int skip_depth = 0;
+			ServiceSnap snap;
+			Anope::string nick;
+			unsigned loaded = 0;
+			char buf[1024];
+			while (fgets(buf, sizeof(buf), fp))
+			{
+				Anope::string line;
+				bool quote = false;
+				for (size_t i = 0; buf[i]; ++i)
+				{
+					if (buf[i] == '\n' || buf[i] == '\r')
+						break;
+					if (in_comment)
+					{
+						if (buf[i] == '*' && buf[i + 1] == '/')
+						{
+							in_comment = false;
+							++i;
+						}
+						continue;
+					}
+					if (!quote && buf[i] == '/' && buf[i + 1] == '*')
+					{
+						in_comment = true;
+						++i;
+						continue;
+					}
+					if (!quote && (buf[i] == '#' || (buf[i] == '/' && buf[i + 1] == '/')))
+						break;
+					if (buf[i] == '"')
+						quote = !quote;
+					line.push_back(buf[i]);
+				}
+				line.trim();
+				if (line.empty())
+					continue;
+
+				if (skip_depth)
+				{
+					for (char c : line)
+					{
+						if (c == '{')
+							++skip_depth;
+						else if (c == '}' && skip_depth)
+							--skip_depth;
+					}
+					continue;
+				}
+
+				Anope::string low = line.lower();
+				if (!in_service)
+				{
+					size_t sp = low.find_first_of(" \t{");
+					Anope::string tok = sp == Anope::string::npos ? low : low.substr(0, sp);
+					if (tok.equals_ci("service"))
+					{
+						pending_service = true;
+						if (line.find('{') != Anope::string::npos)
+						{
+							in_service = true;
+							pending_service = false;
+							snap = ServiceSnap();
+							nick.clear();
+						}
+						continue;
+					}
+				}
+				if (pending_service && line[0] == '{')
+				{
+					in_service = true;
+					pending_service = false;
+					snap = ServiceSnap();
+					nick.clear();
+					continue;
+				}
+				pending_service = false;
+				if (!in_service)
+				{
+					if (line.find('{') != Anope::string::npos)
+						skip_depth = 1;
+					continue;
+				}
+				if (line[0] == '}')
+				{
+					if (!nick.empty())
+					{
+						service_snaps[nick] = snap;
+						++loaded;
+					}
+					in_service = false;
+					continue;
+				}
+				size_t eq = line.find('=');
+				if (eq == Anope::string::npos)
+					continue;
+				Anope::string key = line.substr(0, eq);
+				Anope::string val = ExpandDefines(conf, UnquoteValue(line.substr(eq + 1)));
+				key.trim();
+				if (key.equals_ci("nick"))
+					nick = val;
+				else if (key.equals_ci("user"))
+					snap.user = val;
+				else if (key.equals_ci("host"))
+					snap.host = val;
+				else if (key.equals_ci("real"))
+					snap.real = val;
+				else if (key.equals_ci("modes"))
+					snap.modes = val;
+				else if (key.equals_ci("channels"))
+					snap.channels = val;
+				else if (key.equals_ci("alias"))
+					snap.alias = val;
+			}
+			fclose(fp);
+			if (loaded)
 			{
 				Log(LOG_NORMAL) << "helpserv: " << name
-					<< " was not included from anope.conf (nested include is ignored); loading "
-					<< f.GetPath();
-				conf.LoadConf(f);
+					<< " was not included from anope.conf (nested include is ignored); read "
+					<< loaded << " service{} from " << path;
 				return;
-			}
-			catch (const ConfigException &ex)
-			{
-				Log(LOG_NORMAL) << "helpserv: failed to load " << f.GetPath() << ": " << ex.GetReason();
 			}
 		}
 		Log(LOG_NORMAL) << "helpserv: no helpserv.conf in " << Anope::ConfigDir
@@ -1396,8 +1562,9 @@ public:
 
 	void OnReload(Configuration::Conf &conf) override
 	{
-		TryLoadSidecar(conf);
 		LoadServiceSnaps(conf);
+		if (!ModuleConfigLoaded(conf))
+			LoadSidecarServices(conf);
 
 		const auto &block = FindOurModule(conf);
 		const auto &help = block.GetBlock("help");
