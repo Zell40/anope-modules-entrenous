@@ -32,7 +32,11 @@ Les tickets ouverts via AideMoi ou SignalMoi sont toujours notifiés par **HelpS
    }
    ```
 
-   Le `module { name = "helpserv" }` et les `service { }` sont déjà dans ce fichier. Dans `anope.conf`, n’ajoute **que** l’include ci-dessus : un second `module { name = "helpserv" }` (vide) ferait ignorer tout `helpserv.conf` (noms réels, préfixes, anti-spam). Ne pas coller le `anope.example.conf` d’une version plus récente d’Anope par-dessus la conf EntreNous.
+   Le `module { name = "helpserv" }` et les `service { }` sont déjà dans ce fichier. Dans `anope.conf`, n’ajoute **que** l’include ci-dessus.
+
+   Anope n’applique **que** les `include` écrits dans `anope.conf`. Un include dans `modules.conf` (ou un `module { name = "helpserv" }` vide à côté) est ignoré : les bots reviennent alors avec le nom réel « Help desk », sans `#_Robots` ni préfixes `&` / `%`.
+
+   Après démarrage, les logs doivent contenir une ligne `helpserv: applied HelpServ real="..."`. Si tu vois `was not included from anope.conf`, déplace l’include dans `anope.conf`.
 
 Les personnes présentes sur `#_BO` ont les commandes d’équipe. Pour un opertype (ex. Helpeur) :
 

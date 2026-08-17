@@ -530,6 +530,44 @@ namespace
 		return ag.HasPriv("OP") || ag.HasPriv("HALFOP") || ag.HasPriv("PROTECT")
 			|| ag.HasPriv("OWNER") || ag.HasPriv("FOUNDER") || ag.founder;
 	}
+
+	void SendUserPrivmsg(BotInfo *source, User *target, const Anope::string &msg, const Anope::string &msgid = "")
+	{
+		if (!source || !target || msg.empty() || !IRCD)
+			return;
+		Anope::map<Anope::string> tags;
+		if (!msgid.empty())
+			tags["+reply"] = msgid;
+		LineWrapper lw(Language::Translate(target, msg.c_str()));
+		for (Anope::string line; lw.GetLine(line); )
+			IRCD->SendPrivmsg(source, target->GetUID(), line, tags);
+	}
+
+	void SendUserPrivmsg(BotInfo *source, User *target, const char *fmt, ...)
+	{
+		if (!source || !target || !fmt)
+			return;
+		const char *translated_message = Language::Translate(target, fmt);
+		Anope::string buf;
+		ANOPE_FORMAT(fmt, translated_message, buf);
+		SendUserPrivmsg(source, target, buf);
+	}
+
+	class UserPrivmsgReply final
+		: public CommandReply
+	{
+		User *target;
+	public:
+		explicit UserPrivmsgReply(User *t) : target(t) {}
+		void SendMessage(BotInfo *source, const Anope::string &msg) override
+		{
+			SendUserPrivmsg(source, target, msg);
+		}
+		void SendMessage(CommandSource &source, const Anope::string &msg) override
+		{
+			SendUserPrivmsg(source.service, target, msg, source.msgid);
+		}
+	};
 }
 
 struct TicketLine final
@@ -883,6 +921,11 @@ class ModuleHelpServ
 	unsigned ip_per_hour = 8;
 	time_t ticket_expire = 0;
 	std::vector<HelpAutoReply> auto_replies;
+	struct ServiceSnap final
+	{
+		Anope::string user, host, real, modes, channels, alias;
+	};
+	Anope::map<ServiceSnap> service_snaps;
 
 	Reference<BotInfo> StaffBot;
 	Reference<BotInfo> AideBot;
@@ -1003,16 +1046,12 @@ class ModuleHelpServ
 	{
 		if (!bi || channel.empty() || channel[0] != '#')
 			return;
-		Anope::string spec = prefix + channel;
-		for (auto &existing : bi->botchannels)
+		for (const auto &existing : bi->botchannels)
 		{
 			if (ChannelNameFromSpec(existing).equals_ci(channel))
-			{
-				existing = spec;
 				return;
-			}
 		}
-		bi->botchannels.push_back(spec);
+		bi->botchannels.push_back(prefix + channel);
 	}
 
 	void ApplyBotChannels(BotInfo *bi)
@@ -1091,15 +1130,78 @@ class ModuleHelpServ
 		return bi;
 	}
 
+	bool ModuleConfigLoaded(Configuration::Conf &conf) const
+	{
+		for (const auto &[_, b] : conf.GetBlocks("module"))
+		{
+			const auto n = b.Get<const Anope::string>("name");
+			if ((n.equals_ci(this->name) || n.equals_ci("helpserv") || n.equals_ci("aideserv"))
+				&& b.CountBlock("help") && b.CountBlock("report"))
+				return true;
+		}
+		return false;
+	}
+
+	void TryLoadSidecar(Configuration::Conf &conf)
+	{
+		if (ModuleConfigLoaded(conf))
+			return;
+
+		static const char *const names[] = { "helpserv.conf", "helpserv.example.conf" };
+		for (const char *name : names)
+		{
+			Configuration::File f(name, false);
+			if (!Anope::IsFile(f.GetPath()))
+				continue;
+			try
+			{
+				Log(LOG_NORMAL) << "helpserv: " << name
+					<< " was not included from anope.conf (nested include is ignored); loading "
+					<< f.GetPath();
+				conf.LoadConf(f);
+				return;
+			}
+			catch (const ConfigException &ex)
+			{
+				Log(LOG_NORMAL) << "helpserv: failed to load " << f.GetPath() << ": " << ex.GetReason();
+			}
+		}
+		Log(LOG_NORMAL) << "helpserv: no helpserv.conf in " << Anope::ConfigDir
+			<< " — using built-in defaults (real name \"Help desk\")";
+	}
+
+	void LoadServiceSnaps(Configuration::Conf &conf)
+	{
+		service_snaps.clear();
+		for (const auto &[_, s] : conf.GetBlocks("service"))
+		{
+			const auto nick = s.Get<const Anope::string>("nick");
+			if (nick.empty())
+				continue;
+			ServiceSnap snap;
+			snap.user = s.Get<const Anope::string>("user");
+			snap.host = s.Get<const Anope::string>("host");
+			snap.real = s.Get<const Anope::string>("real");
+			snap.modes = s.Get<const Anope::string>("modes");
+			snap.channels = s.Get<const Anope::string>("channels");
+			snap.alias = s.Get<const Anope::string>("alias");
+			service_snaps[nick] = snap;
+		}
+	}
+
 	const Configuration::Block &FindOurModule(Configuration::Conf &conf)
 	{
 		const Configuration::Block *best = nullptr;
 		size_t best_score = 0;
 		for (const auto &[_, b] : conf.GetBlocks("module"))
 		{
-			if (!b.Get<const Anope::string>("name").equals_ci(this->name))
+			const auto n = b.Get<const Anope::string>("name");
+			const bool named = n.equals_ci(this->name) || n.equals_ci("helpserv") || n.equals_ci("aideserv");
+			if (!named && !b.CountBlock("help") && !b.CountBlock("report"))
 				continue;
 			size_t score = b.GetItems().size() + b.CountBlock("help") * 50 + b.CountBlock("report") * 50;
+			if (named)
+				score += 10;
 			if (score > best_score)
 			{
 				best_score = score;
@@ -1109,27 +1211,69 @@ class ModuleHelpServ
 		return best ? *best : conf.GetModule(this);
 	}
 
-	void OverlayServiceIdent(Configuration::Conf &conf, const Anope::string &nick,
-		Anope::string &user, Anope::string &host, Anope::string &real, Anope::string &modes)
+	void OverlayFromSnap(const Anope::string &nick, Anope::string &user, Anope::string &host,
+		Anope::string &real, Anope::string &modes)
 	{
-		for (const auto &[_, s] : conf.GetBlocks("service"))
+		auto it = service_snaps.find(nick);
+		if (it == service_snaps.end())
+			return;
+		const auto &s = it->second;
+		if (!s.user.empty())
+			user = s.user;
+		if (!s.host.empty())
+			host = s.host;
+		if (!s.real.empty())
+			real = s.real;
+		if (!s.modes.empty())
+			modes = s.modes;
+	}
+
+	void ApplyServiceSnap(BotInfo *bi)
+	{
+		if (!bi)
+			return;
+		auto it = service_snaps.find(bi->nick);
+		if (it == service_snaps.end())
+			return;
+		const auto &s = it->second;
+		if (!s.user.empty())
+			bi->SetIdent(s.user);
+		if (!s.host.empty())
+			bi->host = s.host;
+		if (!s.modes.empty())
+			bi->botmodes = s.modes;
+		if (!s.alias.empty())
+			bi->alias = s.alias;
+		if (!s.real.empty() && !s.real.equals_cs(bi->realname))
 		{
-			if (!s.Get<const Anope::string>("nick").equals_ci(nick))
-				continue;
-			const auto u = s.Get<const Anope::string>("user");
-			const auto h = s.Get<const Anope::string>("host");
-			const auto r = s.Get<const Anope::string>("real");
-			const auto m = s.Get<const Anope::string>("modes");
-			if (!u.empty())
-				user = u;
-			if (!h.empty())
-				host = h;
-			if (!r.empty())
-				real = r;
-			if (!m.empty())
-				modes = m;
-			break;
+			bi->SetRealname(s.real);
+			if (bi->introduced && IRCD)
+				Uplink::Send(bi, "FNAME", bi->realname);
 		}
+		commasepstream sep(s.channels);
+		for (Anope::string token; sep.GetToken(token);)
+		{
+			token.trim();
+			if (!token.empty())
+				JoinSpec(bi, token);
+		}
+	}
+
+	void LogAppliedConfig()
+	{
+		auto chans = [this](const Anope::string &nick) -> Anope::string
+		{
+			auto it = service_snaps.find(nick);
+			return it == service_snaps.end() ? Anope::string("-") : it->second.channels;
+		};
+		Log(LOG_NORMAL) << "helpserv: applied " << staff_nick << " real=\"" << staff_real
+			<< "\" prefix=" << (staff_prefix.empty() ? Anope::string("none") : staff_prefix)
+			<< " channels=" << chans(staff_nick)
+			<< "; " << help_nick << " prefix=" << (help_prefix.empty() ? Anope::string("none") : help_prefix)
+			<< " channels=" << chans(help_nick)
+			<< "; " << report_nick << " prefix=" << (report_prefix.empty() ? Anope::string("none") : report_prefix)
+			<< " channels=" << chans(report_nick)
+			<< "; service{}=" << service_snaps.size();
 	}
 
 	void BindUserCommands(BotInfo *bi, bool report)
@@ -1197,7 +1341,7 @@ public:
 	{
 		MeHelpServ = this;
 		SetAuthor("EntreNous");
-		SetVersion("1.6");
+		SetVersion("1.8");
 		ModuleManager::SetPriority(this, I_OnInvite, PRIORITY_LAST);
 	}
 
@@ -1215,6 +1359,9 @@ public:
 		StaffBot = EnsureBot(staff_nick, staff_user, staff_host, staff_real, staff_modes);
 		AideBot = EnsureBot(help_nick, help_user, help_host, help_real, help_modes);
 		ReportBot = EnsureBot(report_nick, report_user, report_host, report_real, report_modes);
+		ApplyServiceSnap(StaffBot);
+		ApplyServiceSnap(AideBot);
+		ApplyServiceSnap(ReportBot);
 
 		// HelpServ is the operator client: hide it from /bs botlist for non-opers
 		// and block casual BotServ ASSIGN. AideMoi / SignalMoi stay normal BotServ bots.
@@ -1229,7 +1376,7 @@ public:
 		BindUserCommands(AideBot, false);
 		BindUserCommands(ReportBot, true);
 
-		// HelpServ is the operator bot: staff + logs, plus any extra service { channels }.
+		// Homes only if missing: service { channels } already has prefixes and extras.
 		EnsureHomeChannel(StaffBot, staff_prefix, staff_channel);
 		EnsureHomeChannel(StaffBot, staff_prefix, log_channel);
 		EnsureHomeChannel(AideBot, help_prefix, help_channel);
@@ -1248,6 +1395,9 @@ public:
 
 	void OnReload(Configuration::Conf &conf) override
 	{
+		TryLoadSidecar(conf);
+		LoadServiceSnaps(conf);
+
 		const auto &block = FindOurModule(conf);
 		const auto &help = block.GetBlock("help");
 		const auto &report = block.GetBlock("report");
@@ -1257,7 +1407,7 @@ public:
 		staff_host = block.Get<const Anope::string>("host", conf.GetBlock("serverinfo").Get<const Anope::string>("name"));
 		staff_real = block.Get<const Anope::string>("real", "Help desk");
 		staff_modes = block.Get<const Anope::string>("modes");
-		OverlayServiceIdent(conf, staff_nick, staff_user, staff_host, staff_real, staff_modes);
+		OverlayFromSnap(staff_nick, staff_user, staff_host, staff_real, staff_modes);
 
 		help_nick = help.Get<const Anope::string>("nick", "AideMoi");
 		report_nick = report.Get<const Anope::string>("nick", "SignalMoi");
@@ -1269,8 +1419,8 @@ public:
 		report_real = report.Get<const Anope::string>("real", "Report desk");
 		help_modes = help.Get<const Anope::string>("modes");
 		report_modes = report.Get<const Anope::string>("modes");
-		OverlayServiceIdent(conf, help_nick, help_user, help_host, help_real, help_modes);
-		OverlayServiceIdent(conf, report_nick, report_user, report_host, report_real, report_modes);
+		OverlayFromSnap(help_nick, help_user, help_host, help_real, help_modes);
+		OverlayFromSnap(report_nick, report_user, report_host, report_real, report_modes);
 		help_channel = ChannelNameFromSpec(help.Get<const Anope::string>("channel", "#Aide.chat"));
 		report_channel = ChannelNameFromSpec(report.Get<const Anope::string>("channel", "#Signalement.chat"));
 		staff_channel = ChannelNameFromSpec(block.Get<const Anope::string>("staff_channel", "#_BO"));
@@ -1291,6 +1441,7 @@ public:
 		ip_per_hour = block.Get<unsigned>("ip_per_hour", "8");
 		ticket_expire = block.Get<time_t>("ticket_expire", "7d");
 		LoadAutoReplies(help);
+		LogAppliedConfig();
 
 		new BindTimer(this);
 	}
@@ -1302,6 +1453,9 @@ public:
 
 	void OnUplinkSync(Server *) override
 	{
+		ApplyServiceSnap(StaffBot);
+		ApplyServiceSnap(AideBot);
+		ApplyServiceSnap(ReportBot);
 		ApplyBotChannels(StaffBot);
 		ApplyBotChannels(AideBot);
 		ApplyBotChannels(ReportBot);
@@ -1325,7 +1479,7 @@ public:
 		User *opener = FindOpener(t);
 		BotInfo *userbot = BotForQueue(t->queue);
 		if (opener && userbot)
-			opener->SendMessage(userbot, _("Your ticket \002#%u\002 has expired because it was inactive."), t->id);
+			SendUserPrivmsg(userbot, opener, _("Your ticket \002#%u\002 has expired because it was inactive."), t->id);
 		const char *fmt = Language::Translate(_("%s — expired (inactive)"));
 		NotifyStaff(Anope::Format(fmt, TicketNoticePrefix(t->queue, t->id).c_str()));
 	}
@@ -1511,7 +1665,7 @@ public:
 		{
 			if (!f.warned)
 			{
-				u->SendMessage(bi, _("Please slow down. Wait a few seconds between messages."));
+				SendUserPrivmsg(bi, u, _("Please slow down. Wait a few seconds between messages."));
 				f.warned = true;
 			}
 			return true;
@@ -1523,7 +1677,7 @@ public:
 			if (f.repeats >= 3)
 			{
 				if (f.repeats == 3)
-					u->SendMessage(bi, _("Repeated messages are ignored."));
+					SendUserPrivmsg(bi, u, _("Repeated messages are ignored."));
 				f.last_msg = now;
 				return true;
 			}
@@ -1606,7 +1760,7 @@ public:
 
 		if (!u->Account() && unreg_min_online && u->signon && Anope::CurTime - u->signon < static_cast<time_t>(unreg_min_online))
 		{
-			u->SendMessage(bi, _("Please wait a few seconds after connecting before opening a ticket."));
+			SendUserPrivmsg(bi, u, _("Please wait a few seconds after connecting before opening a ticket."));
 			return false;
 		}
 
@@ -1620,7 +1774,7 @@ public:
 			time_t closed = LastClosed(queue, key, "");
 			if (closed && Anope::CurTime - closed < static_cast<time_t>(unreg_cooldown))
 			{
-				u->SendMessage(bi, _("You already opened a ticket recently. Please wait before opening another."));
+				SendUserPrivmsg(bi, u, _("You already opened a ticket recently. Please wait before opening another."));
 				NoticeLimit(queue, u, "cooldown");
 				return false;
 			}
@@ -1632,14 +1786,14 @@ public:
 		unsigned day_max = u->Account() ? reg_per_day : unreg_per_day;
 		if ((hour_max && hour_n >= hour_max) || (day_max && day_n >= day_max))
 		{
-			u->SendMessage(bi, _("Too many tickets from your connection. You can still be helped: please wait, or identify to your account if you have one."));
+			SendUserPrivmsg(bi, u, _("Too many tickets from your connection. You can still be helped: please wait, or identify to your account if you have one."));
 			NoticeLimit(queue, u, "rate limit");
 			return false;
 		}
 
 		if (ip_per_hour && CountRecentIp(queue, key, hour) >= ip_per_hour)
 		{
-			u->SendMessage(bi, _("Too many tickets from your connection. You can still be helped: please wait, or identify to your account if you have one."));
+			SendUserPrivmsg(bi, u, _("Too many tickets from your connection. You can still be helped: please wait, or identify to your account if you have one."));
 			NoticeLimit(queue, u, "IP rate limit");
 			return false;
 		}
@@ -1675,7 +1829,7 @@ public:
 			t->AddLine('U', u->nick, summary);
 		t->QueueUpdate();
 
-		u->SendMessage(bi, _("Ticket \002#%u\002 is now open. A helper will take it as soon as possible. You can keep sending messages here; they will be added to the ticket."), t->id);
+		SendUserPrivmsg(bi, u, _("Ticket \002#%u\002 is now open. A helper will take it as soon as possible. You can keep sending messages here; they will be added to the ticket."), t->id);
 
 		Anope::string who = t->opener_nick;
 		if (!t->opener_account.empty())
@@ -1688,7 +1842,7 @@ public:
 	void AppendTicket(AideTicket *t, User *u, BotInfo *bi, const Anope::string &text)
 	{
 		t->AddLine('U', u->nick, text);
-		u->SendMessage(bi, _("Your message has been added to ticket \002#%u\002."), t->id);
+		SendUserPrivmsg(bi, u, _("Your message has been added to ticket \002#%u\002."), t->id);
 
 		const char *ufmt = Language::Translate(_("%s — update from %s: %s"));
 		NotifyStaff(Anope::Format(ufmt, TicketNoticePrefix(t->queue, t->id).c_str(), u->nick.c_str(), text.c_str()));
@@ -1761,7 +1915,7 @@ public:
 		{
 			line.trim();
 			if (!line.empty())
-				u->SendMessage(bi, "%s", line.c_str());
+				SendUserPrivmsg(bi, u, "%s", line.c_str());
 		}
 	}
 
@@ -1808,7 +1962,7 @@ public:
 
 		if (st.faq_sent)
 		{
-			u->SendMessage(bi, _("If that page is not enough, describe the problem in a few words (what you tried, and the error)."));
+			SendUserPrivmsg(bi, u, _("If that page is not enough, describe the problem in a few words (what you tried, and the error)."));
 			return true;
 		}
 
@@ -1819,7 +1973,7 @@ public:
 			for (const auto *item : specific)
 				SendDocLines(u, bi, item->reply);
 		}
-		u->SendMessage(bi, _("If that is not it, describe the problem in a few words."));
+		SendUserPrivmsg(bi, u, _("If that is not it, describe the problem in a few words."));
 		st.faq_sent = true;
 		return true;
 	}
@@ -1847,9 +2001,9 @@ public:
 		if (!LooksLikeRequest(message, min_request_len))
 		{
 			if (st.step == 0)
-				u->SendMessage(bi, _("Tell me what is going wrong (what you tried, and the result). For how to use the chat: https://www.reseau-entrenous.fr/aide/"));
+				SendUserPrivmsg(bi, u, _("Tell me what is going wrong (what you tried, and the result). For how to use the chat: https://www.reseau-entrenous.fr/aide/"));
 			else
-				u->SendMessage(bi, _("A little more detail will help: the nickname, the channel, or the exact error if you have one."));
+				SendUserPrivmsg(bi, u, _("A little more detail will help: the nickname, the channel, or the exact error if you have one."));
 			++st.step;
 			return;
 		}
@@ -1867,9 +2021,9 @@ public:
 		if (!u || !bi)
 			return;
 		if (!known_nick.empty())
-			u->SendMessage(bi, _("I take reports in private. I have the nickname \002%s\002. Describe what happened (where, when, and why). Do not discuss this in a public channel."), known_nick.c_str());
+			SendUserPrivmsg(bi, u, _("I take reports in private. I have the nickname \002%s\002. Describe what happened (where, when, and why). Do not discuss this in a public channel."), known_nick.c_str());
 		else
-			u->SendMessage(bi, _("I take reports in private. Who are you reporting? Give their nickname if you know it, then describe what happened. Do not discuss this in a public channel."));
+			SendUserPrivmsg(bi, u, _("I take reports in private. Who are you reporting? Give their nickname if you know it, then describe what happened. Do not discuss this in a public channel."));
 	}
 
 	void HandleReportDialogue(User *u, BotInfo *bi, const Anope::string &message)
@@ -1881,7 +2035,7 @@ public:
 		}
 		if (require_account_report && !u->Account())
 		{
-			u->SendMessage(bi, NICK_IDENTIFY_REQUIRED);
+			SendUserPrivmsg(bi, u, NICK_IDENTIFY_REQUIRED);
 			return;
 		}
 
@@ -1918,11 +2072,11 @@ public:
 		if (st.target.empty() && !unknown)
 		{
 			if (enough)
-				u->SendMessage(bi, _("I have noted that. Who are you reporting? Give their nickname, or say you do not know it."));
+				SendUserPrivmsg(bi, u, _("I have noted that. Who are you reporting? Give their nickname, or say you do not know it."));
 			else if (st.step == 0)
 				SendReportIntro(u, bi, "");
 			else
-				u->SendMessage(bi, _("Who are you reporting? Give their nickname. You can also describe what happened."));
+				SendUserPrivmsg(bi, u, _("Who are you reporting? Give their nickname. You can also describe what happened."));
 			++st.step;
 			return;
 		}
@@ -1934,9 +2088,9 @@ public:
 				if (st.step == 0)
 					SendReportIntro(u, bi, st.target);
 				else if (!st.target.empty())
-					u->SendMessage(bi, _("Describe what happened (where, when, and why you are reporting \002%s\002)."), st.target.c_str());
+					SendUserPrivmsg(bi, u, _("Describe what happened (where, when, and why you are reporting \002%s\002)."), st.target.c_str());
 				else
-					u->SendMessage(bi, _("Please describe what happened (where, when, and why)."));
+					SendUserPrivmsg(bi, u, _("Please describe what happened (where, when, and why)."));
 				++st.step;
 				return;
 			}
@@ -1947,19 +2101,19 @@ public:
 			return;
 		CreateTicket(u, bi, QUEUE_REPORT, st.summary, st.category, st.target, st.channel, st.notes);
 		triages.erase(u->GetUID());
-		u->SendMessage(bi, _("If you have screenshots, logs, or extra details, send them now as private messages."));
+		SendUserPrivmsg(bi, u, _("If you have screenshots, logs, or extra details, send them now as private messages."));
 	}
 
 	void StartReport(User *u, BotInfo *bi, const Anope::string &target, const Anope::string &chan, const Anope::string &reason)
 	{
 		if (require_account_report && !u->Account())
 		{
-			u->SendMessage(bi, NICK_IDENTIFY_REQUIRED);
+			SendUserPrivmsg(bi, u, NICK_IDENTIFY_REQUIRED);
 			return;
 		}
 		if (auto *existing = AideTicket::FindOpenFor(u, QUEUE_REPORT))
 		{
-			u->SendMessage(bi, _("You already have open report ticket \002#%u\002. Your message has been added to it."), existing->id);
+			SendUserPrivmsg(bi, u, _("You already have open report ticket \002#%u\002. Your message has been added to it."), existing->id);
 			AppendTicket(existing, u, bi, reason);
 			return;
 		}
@@ -1971,7 +2125,7 @@ public:
 			std::vector<Anope::string> notes;
 			notes.push_back(reason);
 			CreateTicket(u, bi, QUEUE_REPORT, reason, "", target, chan, notes);
-			u->SendMessage(bi, _("If you have screenshots, logs, or extra details, send them now as private messages."));
+			SendUserPrivmsg(bi, u, _("If you have screenshots, logs, or extra details, send them now as private messages."));
 			return;
 		}
 
@@ -2042,13 +2196,22 @@ public:
 			ReportBot ? ReportBot->nick.c_str() : "SignalMoi");
 	}
 
-	EventReturn OnBotPrivmsg(User *u, BotInfo *bi, Anope::string &message, const Anope::map<Anope::string> &) override
+	EventReturn OnBotPrivmsg(User *u, BotInfo *bi, Anope::string &message, const Anope::map<Anope::string> &tags) override
 	{
 		if (!IsUserBot(bi) || !u || u->server == Me)
 			return EVENT_CONTINUE;
 
 		if (LooksLikeCommand(u, bi, message))
-			return EVENT_CONTINUE;
+		{
+			UserPrivmsgReply reply(u);
+			Anope::string msgid;
+			auto it = tags.find("msgid");
+			if (it != tags.end())
+				msgid = it->second;
+			CommandSource source(u->nick, u, u->Account(), &reply, bi, msgid);
+			Command::Run(source, message);
+			return EVENT_STOP;
+		}
 		if (IsFlood(u, bi, message))
 			return EVENT_STOP;
 
@@ -2080,7 +2243,7 @@ public:
 
 		if (ReportBot && c->name.equals_ci(report_channel) && c->FindUser(ReportBot))
 		{
-			u->SendMessage(ReportBot, _("Welcome to %s. Send a private message to \002%s\002 to file a report. Describe what happened; no special command is needed. Do not discuss reports in public."),
+			SendUserPrivmsg(ReportBot, u, _("Welcome to %s. Send a private message to \002%s\002 to file a report. Describe what happened; no special command is needed. Do not discuss reports in public."),
 				c->name.c_str(), ReportBot->nick.c_str());
 			return;
 		}
@@ -2089,9 +2252,9 @@ public:
 		if (c->name.equals_ci(staff_channel) || c->name.equals_ci(log_channel))
 			return;
 		if (!help_greeting.empty())
-			u->SendMessage(AideBot, "%s", help_greeting.c_str());
+			SendUserPrivmsg(AideBot, u, "%s", help_greeting.c_str());
 		else
-			u->SendMessage(AideBot, _("Welcome to %s. Send a private message to \002%s\002 to request help. A ticket is opened only after we understand your problem."),
+			SendUserPrivmsg(AideBot, u, _("Welcome to %s. Send a private message to \002%s\002 to request help. A ticket is opened only after we understand your problem."),
 				c->name.c_str(), AideBot->nick.c_str());
 	}
 
@@ -2290,10 +2453,10 @@ public:
 			Channel *c = Channel::Find(desk);
 			bool on_desk = c && c->FindUser(opener);
 			if (on_desk)
-				opener->SendMessage(userbot, _("Helper \002%s\002 has taken your ticket \002#%u\002. You have been given voice on \002%s\002."),
+				SendUserPrivmsg(userbot, opener, _("Helper \002%s\002 has taken your ticket \002#%u\002. You have been given voice on \002%s\002."),
 					helper.c_str(), t->id, desk.c_str());
 			else
-				opener->SendMessage(userbot, _("Helper \002%s\002 has taken your ticket \002#%u\002. Join \002%s\002 to talk with them; you will be given voice there."),
+				SendUserPrivmsg(userbot, opener, _("Helper \002%s\002 has taken your ticket \002#%u\002. Join \002%s\002 to talk with them; you will be given voice there."),
 					helper.c_str(), t->id, desk.c_str());
 		}
 		VoiceOpener(t, true);
@@ -2749,9 +2912,9 @@ public:
 			if (userbot)
 			{
 				if (reason.empty())
-					opener->SendMessage(userbot, _("Your ticket \002#%u\002 has been closed."), t->id);
+					SendUserPrivmsg(userbot, opener, _("Your ticket \002#%u\002 has been closed."), t->id);
 				else
-					opener->SendMessage(userbot, _("Your ticket \002#%u\002 has been closed: %s"), t->id, reason.c_str());
+					SendUserPrivmsg(userbot, opener, _("Your ticket \002#%u\002 has been closed: %s"), t->id, reason.c_str());
 			}
 		}
 		const char *clfmt = Language::Translate(_("%s — closed by %s (%s)"));
