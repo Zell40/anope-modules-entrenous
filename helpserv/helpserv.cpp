@@ -1114,7 +1114,7 @@ class ModuleHelpServ
 			bi = new BotInfo(nick, user, host, real, modes);
 		else
 		{
-			if (!user.empty())
+			if (!user.empty() && !user.equals_cs(bi->GetIdent()))
 				bi->SetIdent(user);
 			if (!host.empty())
 				bi->host = host;
@@ -1327,14 +1327,14 @@ class ModuleHelpServ
 			fclose(fp);
 			if (loaded)
 			{
-				Log(LOG_NORMAL) << "helpserv: " << name
-					<< " was not included from anope.conf (nested include is ignored); read "
+				Log(LOG_DEBUG) << "helpserv: " << name
+					<< " was not included from anope.conf; read "
 					<< loaded << " service{} from " << path;
 				return;
 			}
 		}
-		Log(LOG_NORMAL) << "helpserv: no helpserv.conf in " << Anope::ConfigDir
-			<< " — using built-in defaults (real name \"Help desk\")";
+		Log(LOG_DEBUG) << "helpserv: no helpserv.conf in " << Anope::ConfigDir
+			<< " — using built-in defaults";
 	}
 
 	void LoadServiceSnaps(Configuration::Conf &conf)
@@ -1403,7 +1403,7 @@ class ModuleHelpServ
 		if (it == service_snaps.end())
 			return;
 		const auto &s = it->second;
-		if (!s.user.empty())
+		if (!s.user.empty() && !s.user.equals_cs(bi->GetIdent()))
 			bi->SetIdent(s.user);
 		if (!s.host.empty())
 			bi->host = s.host;
@@ -1433,7 +1433,7 @@ class ModuleHelpServ
 			auto it = service_snaps.find(nick);
 			return it == service_snaps.end() ? Anope::string("-") : it->second.channels;
 		};
-		Log(LOG_NORMAL) << "helpserv: applied " << staff_nick << " real=\"" << staff_real
+		Log(LOG_DEBUG) << "helpserv: applied " << staff_nick << " real=\"" << staff_real
 			<< "\" prefix=" << (staff_prefix.empty() ? Anope::string("none") : staff_prefix)
 			<< " channels=" << chans(staff_nick)
 			<< "; " << help_nick << " prefix=" << (help_prefix.empty() ? Anope::string("none") : help_prefix)
