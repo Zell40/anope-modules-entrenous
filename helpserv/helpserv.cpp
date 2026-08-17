@@ -543,7 +543,8 @@ namespace
 			IRCD->SendPrivmsg(source, target->GetUID(), line, tags);
 	}
 
-	void SendUserPrivmsg(BotInfo *source, User *target, const char *fmt, ...) ATTR_FORMAT(3, 4)
+	void SendUserPrivmsg(BotInfo *source, User *target, const char *fmt, ...) ATTR_FORMAT(3, 4);
+	void SendUserPrivmsg(BotInfo *source, User *target, const char *fmt, ...)
 	{
 		if (!source || !target || !fmt)
 			return;
