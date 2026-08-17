@@ -48,10 +48,13 @@ Ajouter un bot sur un salon (indépendant de BotServ) :
 
 ```
 /msg HelpServ JOIN AideMoi #salon
-/msg HelpServ JOIN SignalMoi #salon
+/msg HelpServ JOIN AideMoi +#salon
+/msg HelpServ JOIN SignalMoi #salon admin
 /msg HelpServ PART AideMoi #salon
 /msg HelpServ BOTLIST
 ```
+
+Le statut sur le salon se choisit avec un préfixe (InspIRCd) : `~` fondateur, `&` admin, `@` op, `%` halfop, `+` voice, ou `none`. Par défaut c’est `op` (`@`). Sur les salons d’origine (`#Aide.chat`, `#Signalement.chat`, `#_BO`, `#_logs`), ça se règle dans `helpserv.conf` (`help { prefix }`, `report { prefix }`, `staff_prefix`) — et le même préfixe doit être devant le salon dans `service { channels }`.
 
 AideMoi et SignalMoi apparaissent dans `/bs botlist` mais **ne peuvent pas** être assignés avec BotServ. Seul HelpServ peut les placer :
 
@@ -72,7 +75,7 @@ Un ticket n’est **pas** ouvert sur un salut ou une demande vide (« j’ai bes
 
 SignalMoi fonctionne de la même façon : on parle en message privé (qui, où, ce qui s’est passé). Le ticket s’ouvre tout seul, sans taper `REPORT`. Les non-inscrits peuvent demander de l’aide et signaler ; le spam est limité par IP/hôte (flood, reconnexion, quotas horaires).
 
-Les questions d’utilisation reçoivent d’abord les pages d’aide EntreNous (webchat, NickServ, Gaya, serveur, aide générale) sans ticket. Un incident (erreur, nick pris, « je n’arrive pas… ») ouvre toujours un ticket. D’autres réponses auto peuvent être ajoutées dans `helpserv.conf` (`help { auto { match; reply } }`).
+Les questions d’utilisation reçoivent d’abord **une** page d’aide EntreNous (ou le lien général https://www.reseau-entrenous.fr/aide/), pas une liste de liens. Un incident (erreur, nick pris, « je n’arrive pas… ») ouvre toujours un ticket. D’autres réponses auto peuvent être ajoutées dans `helpserv.conf` (`help { auto { match; reply } }`).
 
 Quand un aidant prend un ticket (`NEXT` / `PICKUP`), l’ouvreur est prévenu en message privé (AideMoi ou SignalMoi). S’il est déjà sur `#Aide.chat` ou `#Signalement.chat`, il reçoit le voice (`+v`). Sinon il est invité sur le salon ; le voice est posé dès qu’il rejoint.
 

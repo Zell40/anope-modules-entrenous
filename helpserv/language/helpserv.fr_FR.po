@@ -68,29 +68,52 @@ msgstr "Ticket #%u nouveau message de %s : %s"
 msgid "%s — update from %s: %s"
 msgstr "%s — mise à jour de %s : %s"
 
-msgid "Hello, I am the help bot. A ticket is only opened once we know what you need. Please describe your problem (nick, channel, connection, or something else)."
-msgstr "Bonjour, je suis le robot d'aide. Un ticket n'est ouvert qu'une fois que l'on sait de quoi vous avez besoin. Décrivez votre problème (pseudo, salon, connexion, ou autre)."
+msgid "Tell me what is going wrong (what you tried, and the result). For how to use the chat: https://www.reseau-entrenous.fr/aide/"
+msgstr "Dites-moi ce qui bloque (ce que vous avez essayé, et le résultat). Pour l'utilisation du tchat : https://www.reseau-entrenous.fr/aide/"
 
-msgid "Hello, I take reports in private. Who are you reporting? Give their nickname if you know it, then describe what happened. Do not discuss this in a public channel."
-msgstr "Bonjour, je prends les signalements en privé. Qui signalez-vous ? Donnez son pseudo si vous le connaissez, puis décrivez ce qui s'est passé. N'en discutez pas sur un salon public."
+msgid "A little more detail will help: the nickname, the channel, or the exact error if you have one."
+msgstr "Encore un peu de détail : le pseudo, le salon, ou le message d'erreur exact si vous en avez un."
+
+msgid "Webchat: https://www.reseau-entrenous.fr/aide/webchat/"
+msgstr "Webchat : https://www.reseau-entrenous.fr/aide/webchat/"
+
+msgid "Nicknames (NickServ): https://www.reseau-entrenous.fr/aide/nickserv/"
+msgstr "Pseudos (NickServ) : https://www.reseau-entrenous.fr/aide/nickserv/"
+
+msgid "Personal channels (Gaya): https://www.reseau-entrenous.fr/aide/gaya/"
+msgstr "Salons personnels (Gaya) : https://www.reseau-entrenous.fr/aide/gaya/"
+
+msgid "Server help: https://www.reseau-entrenous.fr/aide/aide-serveur/"
+msgstr "Aide serveur : https://www.reseau-entrenous.fr/aide/aide-serveur/"
+
+msgid "Chat help: https://www.reseau-entrenous.fr/aide/"
+msgstr "Aide du tchat : https://www.reseau-entrenous.fr/aide/"
+
+msgid "If that is not it, describe the problem in a few words."
+msgstr "Si ce n'est pas ça, décrivez le problème en quelques mots."
+
+msgid "If that page is not enough, describe the problem in a few words (what you tried, and the error)."
+msgstr "Si cette page ne suffit pas, décrivez le problème en quelques mots (ce que vous avez essayé, et l'erreur)."
+
+msgid "I take reports in private. Who are you reporting? Give their nickname if you know it, then describe what happened. Do not discuss this in a public channel."
+msgstr "Je prends les signalements en privé. Qui signalez-vous ? Donnez son pseudo si vous le connaissez, puis décrivez ce qui s'est passé. N'en discutez pas sur un salon public."
+
+#, c-format
+msgid "I take reports in private. I have the nickname %s. Describe what happened (where, when, and why). Do not discuss this in a public channel."
+msgstr "Je prends les signalements en privé. J'ai le pseudo %s. Décrivez ce qui s'est passé (où, quand, et pourquoi). N'en discutez pas sur un salon public."
+
+#, c-format
+msgid "Describe what happened (where, when, and why you are reporting %s)."
+msgstr "Décrivez ce qui s'est passé (où, quand, et pourquoi vous signalez %s)."
+
+msgid "Please describe what happened (where, when, and why)."
+msgstr "Décrivez ce qui s'est passé (où, quand, et pourquoi)."
 
 msgid "I have noted that. Who are you reporting? Give their nickname, or say you do not know it."
 msgstr "C'est noté. Qui signalez-vous ? Donnez son pseudo, ou dites si vous ne le connaissez pas."
 
 msgid "Who are you reporting? Give their nickname. You can also describe what happened."
 msgstr "Qui signalez-vous ? Donnez son pseudo. Vous pouvez aussi décrire ce qui s'est passé."
-
-msgid "Could you give a little more detail so the team can help you? For example what you tried, and what error you see."
-msgstr "Pouvez-vous donner un peu plus de détails pour que l'équipe puisse vous aider ? Par exemple ce que vous avez essayé, et l'erreur que vous voyez."
-
-msgid "If that does not solve it, describe the exact problem (what you tried and the error) and a ticket will be opened."
-msgstr "Si cela ne suffit pas, décrivez le problème précis (ce que vous avez essayé et l'erreur) : un ticket sera alors ouvert."
-
-msgid "If the help pages are not enough, describe the exact problem (what you tried and any error) so we can open a ticket."
-msgstr "Si les pages d'aide ne suffisent pas, décrivez le problème précis (ce que vous avez essayé et l'erreur) pour qu'un ticket soit ouvert."
-
-msgid "Please describe what happened (where, when, and why you are reporting this person)."
-msgstr "Merci de décrire ce qui s'est passé (où, quand, et pourquoi vous signalez cette personne)."
 
 msgid "To file a report, type REPORT nick [#channel] reason (or SIGNALER). Do not discuss reports in public. After the ticket is open, send any evidence here by private message."
 msgstr "Pour déposer un signalement, tapez REPORT pseudo [#salon] raison (ou SIGNALER). Ne discutez pas des signalements en public. Une fois le ticket ouvert, envoyez les preuves ici en message privé."
@@ -101,10 +124,6 @@ msgstr "Vous avez déjà le ticket de signalement #%u ouvert. Votre message y 
 
 msgid "If you have screenshots, logs, or extra details, send them now as private messages."
 msgstr "Si vous avez des captures d'écran, des journaux ou d'autres détails, envoyez-les maintenant en messages privés."
-
-#, c-format
-msgid "I have the nickname %s. Please describe what happened so I can open the ticket as close as possible to your request."
-msgstr "J'ai le pseudo %s. Décrivez ce qui s'est passé pour que je puisse ouvrir le ticket au plus près de votre demande."
 
 #, c-format
 msgid ""
@@ -394,6 +413,20 @@ msgstr "Le bot %s ne peut pas être assigné avec BotServ. Utilisez /msg %s J
 #, c-format
 msgid "%s has been added to %s."
 msgstr "%s a été ajouté sur %s."
+
+#, c-format
+msgid "%s status on %s updated."
+msgstr "Statut de %s sur %s mis à jour."
+
+msgid "Specify a channel, for example +#channel or #channel voice."
+msgstr "Indiquez un salon, par exemple +#salon ou #salon voice."
+
+#, c-format
+msgid "%s is already on its home channel %s. Change prefix in helpserv.conf instead."
+msgstr "%s est déjà sur son salon d'origine %s. Changez prefix dans helpserv.conf."
+
+msgid "Adds the help or report bot to a channel. Optional prefix: ~ owner, & admin, @ op, %% halfop, + voice, or names (admin, voice, none). Default comes from helpserv.conf. Example: JOIN AideMoi +#salon. This does not replace a BotServ assignment."
+msgstr "Ajoute le bot d'aide ou de signalement sur un salon. Préfixe optionnel : ~ fondateur, & admin, @ op, %% halfop, + voice, ou un nom (admin, voice, none). La valeur par défaut vient de helpserv.conf. Exemple : JOIN AideMoi +#salon. Cela ne remplace pas une assignation BotServ."
 
 #, c-format
 msgid "%s has been removed from %s."

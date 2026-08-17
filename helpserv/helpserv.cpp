@@ -54,6 +54,52 @@ namespace
 		return h == Anope::string::npos ? spec : spec.substr(h);
 	}
 
+	/* ~ owner, & admin, @ op, % halfop, + voice. Names and mode letters also work. */
+	Anope::string ParseStatusPrefix(const Anope::string &in)
+	{
+		Anope::string t = in;
+		t.trim();
+		if (t.empty())
+			return "";
+		Anope::string low = t.lower();
+		if (low.equals_ci("none") || low.equals_ci("no") || low.equals_ci("0") || low.equals_ci("-")
+			|| low.equals_ci("normal") || low.equals_ci("member") || low.equals_ci("rien"))
+			return "";
+		if (low.equals_ci("owner") || low.equals_ci("fondateur") || low.equals_ci("founder") || low.equals_ci("q"))
+			return "~";
+		if (low.equals_ci("admin") || low.equals_ci("protect") || low.equals_ci("a"))
+			return "&";
+		if (low.equals_ci("op") || low.equals_ci("oper") || low.equals_ci("operator") || low.equals_ci("o"))
+			return "@";
+		if (low.equals_ci("halfop") || low.equals_ci("hop") || low.equals_ci("h"))
+			return "%";
+		if (low.equals_ci("voice") || low.equals_ci("v"))
+			return "+";
+
+		Anope::string out;
+		for (char c : t)
+		{
+			if (c == '~' || c == '&' || c == '@' || c == '%' || c == '+'
+				|| c == 'q' || c == 'a' || c == 'o' || c == 'h' || c == 'v'
+				|| c == 'Q' || c == 'A' || c == 'O' || c == 'H' || c == 'V')
+				out.push_back(c);
+		}
+		return out;
+	}
+
+	void SplitChanSpec(const Anope::string &in, Anope::string &prefix, Anope::string &chan)
+	{
+		size_t h = in.find('#');
+		if (h == Anope::string::npos)
+		{
+			prefix = ParseStatusPrefix(in);
+			chan.clear();
+			return;
+		}
+		prefix = ParseStatusPrefix(in.substr(0, h));
+		chan = in.substr(h);
+	}
+
 	bool IsGreeting(const Anope::string &text)
 	{
 		Anope::string t = text;
@@ -249,10 +295,10 @@ namespace
 	bool LooksLikeHowTo(const Anope::string &folded)
 	{
 		static const char *const phrases[] = {
-			"comment", "comment faire", "comment utiliser", "comment march", "comment fonctionne",
+			"comment faire", "comment utiliser", "comment march", "comment fonctionne",
 			"cest quoi", "quest ce", "ca sert a quoi", "a quoi sert",
-			"tuto", "tutoriel", "documentation", "guide", "utilisation",
-			"lien", "url", "page daide", "site daide", "ou trouver", "aide pour",
+			"tuto", "tutoriel", "documentation", "guide",
+			"lien daide", "page daide", "site daide", "ou trouver", "aide pour",
 		};
 		for (const char *phrase : phrases)
 		{
@@ -777,6 +823,9 @@ class ModuleHelpServ
 	Anope::string report_channel;
 	Anope::string staff_channel;
 	Anope::string log_channel;
+	Anope::string staff_prefix = "@";
+	Anope::string help_prefix = "@";
+	Anope::string report_prefix = "@";
 	Anope::string help_greeting;
 	bool require_account_report = false;
 	unsigned min_request_len = 12;
@@ -841,12 +890,13 @@ class ModuleHelpServ
 		Anope::string chname = spec.substr(h);
 
 		bool known = false;
-		for (const auto &existing : bi->botchannels)
+		for (auto &existing : bi->botchannels)
 		{
 			size_t eh = existing.find('#');
 			Anope::string ename = existing.substr(eh != Anope::string::npos ? eh : 0);
 			if (ename.equals_ci(chname))
 			{
+				existing = spec;
 				known = true;
 				break;
 			}
@@ -892,15 +942,26 @@ class ModuleHelpServ
 			bi->Part(c);
 	}
 
-	bool JoinUserBot(BotInfo *bi, const Anope::string &chname)
+	Anope::string PrefixFor(BotInfo *bi)
+	{
+		if (IsAideBot(bi))
+			return help_prefix;
+		if (IsReportBot(bi))
+			return report_prefix;
+		return staff_prefix;
+	}
+
+	bool JoinUserBot(BotInfo *bi, const Anope::string &chname, const Anope::string &prefix)
 	{
 		if (!bi || chname.empty() || chname[0] != '#')
 			return false;
 		Anope::string queue = QueueFor(bi);
 		if (queue.empty())
 			return false;
-		Anope::string spec = "@" + chname;
-		if (!HelpServChan::Find(queue, chname) && !IsHomeChannel(bi, chname))
+		Anope::string spec = prefix + chname;
+		if (auto *existing = HelpServChan::Find(queue, chname))
+			existing->spec = spec;
+		else if (!IsHomeChannel(bi, chname))
 		{
 			auto *j = new HelpServChan();
 			j->queue = queue;
@@ -1009,7 +1070,7 @@ public:
 	{
 		MeHelpServ = this;
 		SetAuthor("EntreNous");
-		SetVersion("1.3");
+		SetVersion("1.5");
 		ModuleManager::SetPriority(this, I_OnInvite, PRIORITY_LAST);
 	}
 
@@ -1042,11 +1103,11 @@ public:
 		BindUserCommands(ReportBot, true);
 
 		// HelpServ is the operator bot: staff + logs only.
-		JoinSpec(StaffBot, "@" + staff_channel);
-		JoinSpec(StaffBot, "@" + log_channel);
+		JoinSpec(StaffBot, staff_prefix + staff_channel);
+		JoinSpec(StaffBot, staff_prefix + log_channel);
 		// User-facing bots stay on their public desks (and extra JOIN channels).
-		JoinSpec(AideBot, "@" + help_channel);
-		JoinSpec(ReportBot, "@" + report_channel);
+		JoinSpec(AideBot, help_prefix + help_channel);
+		JoinSpec(ReportBot, report_prefix + report_channel);
 
 		for (auto *j : ExtraJoins)
 		{
@@ -1078,10 +1139,13 @@ public:
 		report_real = report.Get<const Anope::string>("real", "Report desk");
 		help_modes = help.Get<const Anope::string>("modes");
 		report_modes = report.Get<const Anope::string>("modes");
-		help_channel = help.Get<const Anope::string>("channel", "#Aide.chat");
-		report_channel = report.Get<const Anope::string>("channel", "#Signalement.chat");
-		staff_channel = block.Get<const Anope::string>("staff_channel", "#_BO");
-		log_channel = block.Get<const Anope::string>("log_channel", "#_logs");
+		help_channel = ChannelNameFromSpec(help.Get<const Anope::string>("channel", "#Aide.chat"));
+		report_channel = ChannelNameFromSpec(report.Get<const Anope::string>("channel", "#Signalement.chat"));
+		staff_channel = ChannelNameFromSpec(block.Get<const Anope::string>("staff_channel", "#_BO"));
+		log_channel = ChannelNameFromSpec(block.Get<const Anope::string>("log_channel", "#_logs"));
+		staff_prefix = ParseStatusPrefix(block.Get<const Anope::string>("staff_prefix", "@"));
+		help_prefix = ParseStatusPrefix(help.Get<const Anope::string>("prefix", "@"));
+		report_prefix = ParseStatusPrefix(report.Get<const Anope::string>("prefix", "@"));
 		help_greeting = help.Get<const Anope::string>("greeting");
 		require_account_report = report.Get<bool>("require_account", "no");
 		min_request_len = block.Get<unsigned>("min_request_len", "12");
@@ -1525,20 +1589,15 @@ public:
 	{
 		auto_replies.clear();
 		AddAutoReply("webchat, kiwi, kiwiirc, qwebirc, thelounge",
-			"Le webchat : https://www.reseau-entrenous.fr/aide/webchat/", false);
+			_("Webchat: https://www.reseau-entrenous.fr/aide/webchat/"), false);
 		AddAutoReply("nickserv, identify, grouper, ghost, recover, release, enregistrer mon pseudo, enregistrer un pseudo, enregistrer mon nick",
-			"Les services des pseudos NickServ : https://www.reseau-entrenous.fr/aide/nickserv/", false);
+			_("Nicknames (NickServ): https://www.reseau-entrenous.fr/aide/nickserv/"), false);
 		AddAutoReply("gaya, salon personnel, salons personnels, bot des salons",
-			"Le bot des salons personnels Gaya : https://www.reseau-entrenous.fr/aide/gaya/", false);
+			_("Personal channels (Gaya): https://www.reseau-entrenous.fr/aide/gaya/"), false);
 		AddAutoReply("bouncer, bnc, znc, aide serveur, fonctionnement du serveur, commandes serveur, modes serveur",
-			"Comprendre le fonctionnement du serveur de tchat EntreNous : https://www.reseau-entrenous.fr/aide/aide-serveur/", false);
-		AddAutoReply("utilisation, documentation, tutoriel, tuto, guide, aide en ligne, comment ca marche, comment fonctionne, site daide, reseau entrenous, entrenous.fr/aide, tchat, le tchat",
-			"Besoin d'aide? Visitez https://www.reseau-entrenous.fr/aide/ pour trouver de l'aide à l'utilisation du tchat EntreNous.\n"
-			"Le webchat : https://www.reseau-entrenous.fr/aide/webchat/\n"
-			"Les services des pseudos NickServ : https://www.reseau-entrenous.fr/aide/nickserv/\n"
-			"Le bot des salons personnels Gaya : https://www.reseau-entrenous.fr/aide/gaya/\n"
-			"Comprendre le fonctionnement du serveur de tchat EntreNous : https://www.reseau-entrenous.fr/aide/aide-serveur/",
-			true);
+			_("Server help: https://www.reseau-entrenous.fr/aide/aide-serveur/"), false);
+		AddAutoReply("documentation, tutoriel, tuto, guide, aide en ligne, site daide, page daide",
+			_("Chat help: https://www.reseau-entrenous.fr/aide/"), true);
 
 		for (const auto &[_, ab] : help.GetBlocks("auto"))
 		{
@@ -1604,7 +1663,7 @@ public:
 
 		if (st.faq_sent)
 		{
-			u->SendMessage(bi, _("If the help pages are not enough, describe the exact problem (what you tried and any error) so we can open a ticket."));
+			u->SendMessage(bi, _("If that page is not enough, describe the problem in a few words (what you tried, and the error)."));
 			return true;
 		}
 
@@ -1615,7 +1674,7 @@ public:
 			for (const auto *item : specific)
 				SendDocLines(u, bi, item->reply);
 		}
-		u->SendMessage(bi, _("If that does not solve it, describe the exact problem (what you tried and the error) and a ticket will be opened."));
+		u->SendMessage(bi, _("If that is not it, describe the problem in a few words."));
 		st.faq_sent = true;
 		return true;
 	}
@@ -1642,10 +1701,10 @@ public:
 
 		if (!LooksLikeRequest(message, min_request_len))
 		{
-			if (IsGreeting(message) && st.step == 0)
-				u->SendMessage(bi, _("Hello, I am the help bot. A ticket is only opened once we know what you need. Please describe your problem (nick, channel, connection, or something else)."));
+			if (st.step == 0)
+				u->SendMessage(bi, _("Tell me what is going wrong (what you tried, and the result). For how to use the chat: https://www.reseau-entrenous.fr/aide/"));
 			else
-				u->SendMessage(bi, _("Could you give a little more detail so the team can help you? For example what you tried, and what error you see."));
+				u->SendMessage(bi, _("A little more detail will help: the nickname, the channel, or the exact error if you have one."));
 			++st.step;
 			return;
 		}
@@ -1656,6 +1715,16 @@ public:
 			return;
 		CreateTicket(u, bi, QUEUE_HELP, summary, st.category, "", "", st.notes);
 		triages.erase(u->GetUID());
+	}
+
+	void SendReportIntro(User *u, BotInfo *bi, const Anope::string &known_nick)
+	{
+		if (!u || !bi)
+			return;
+		if (!known_nick.empty())
+			u->SendMessage(bi, _("I take reports in private. I have the nickname \002%s\002. Describe what happened (where, when, and why). Do not discuss this in a public channel."), known_nick.c_str());
+		else
+			u->SendMessage(bi, _("I take reports in private. Who are you reporting? Give their nickname if you know it, then describe what happened. Do not discuss this in a public channel."));
 	}
 
 	void HandleReportDialogue(User *u, BotInfo *bi, const Anope::string &message)
@@ -1696,7 +1765,7 @@ public:
 
 		if (IsGreeting(message) && st.target.empty() && st.summary.empty())
 		{
-			u->SendMessage(bi, _("Hello, I take reports in private. Who are you reporting? Give their nickname if you know it, then describe what happened. Do not discuss this in a public channel."));
+			SendReportIntro(u, bi, "");
 			++st.step;
 			return;
 		}
@@ -1705,6 +1774,8 @@ public:
 		{
 			if (enough)
 				u->SendMessage(bi, _("I have noted that. Who are you reporting? Give their nickname, or say you do not know it."));
+			else if (st.step == 0)
+				SendReportIntro(u, bi, "");
 			else
 				u->SendMessage(bi, _("Who are you reporting? Give their nickname. You can also describe what happened."));
 			++st.step;
@@ -1715,10 +1786,12 @@ public:
 		{
 			if (!enough)
 			{
-				if (!st.target.empty())
-					u->SendMessage(bi, _("I have the nickname \002%s\002. Please describe what happened (where, when, and why you are reporting this person)."), st.target.c_str());
+				if (st.step == 0)
+					SendReportIntro(u, bi, st.target);
+				else if (!st.target.empty())
+					u->SendMessage(bi, _("Describe what happened (where, when, and why you are reporting \002%s\002)."), st.target.c_str());
 				else
-					u->SendMessage(bi, _("Please describe what happened (where, when, and why you are reporting this person)."));
+					u->SendMessage(bi, _("Please describe what happened (where, when, and why)."));
 				++st.step;
 				return;
 			}
@@ -1762,9 +1835,11 @@ public:
 		st.started = Anope::CurTime;
 		st.target = target;
 		st.channel = chan;
-		st.notes.push_back(reason);
+		st.step = 1;
+		if (!reason.empty())
+			st.notes.push_back(reason);
 		triages[u->GetUID()] = st;
-		u->SendMessage(bi, _("I have the nickname \002%s\002. Please describe what happened so I can open the ticket as close as possible to your request."), target.c_str());
+		SendReportIntro(u, bi, target);
 	}
 
 	bool LooksLikeCommand(User *u, BotInfo *bi, const Anope::string &message) const
@@ -2206,7 +2281,7 @@ class CommandHelpServReport final
 {
 public:
 	CommandHelpServReport(Module *creator)
-		: Command(creator, "helpserv/report", 2, 2)
+		: Command(creator, "helpserv/report", 1, 2)
 	{
 		SetDesc(_("File a report against a user"));
 		SetSyntax(_("\037nick\037 [\037#channel\037] \037reason\037"));
@@ -2223,21 +2298,19 @@ public:
 		}
 
 		Anope::string target = params[0];
-		Anope::string rest = params[1], chan, reason;
-		spacesepstream ss(rest);
-		Anope::string maybechan;
-		if (ss.GetToken(maybechan) && !maybechan.empty() && maybechan[0] == '#')
+		Anope::string rest = params.size() > 1 ? params[1] : "", chan, reason;
+		if (!rest.empty())
 		{
-			chan = maybechan;
-			reason = ss.GetRemaining();
-		}
-		else
-			reason = rest;
-		reason.trim();
-		if (reason.empty())
-		{
-			OnSyntaxError(source, "");
-			return;
+			spacesepstream ss(rest);
+			Anope::string maybechan;
+			if (ss.GetToken(maybechan) && !maybechan.empty() && maybechan[0] == '#')
+			{
+				chan = maybechan;
+				reason = ss.GetRemaining();
+			}
+			else
+				reason = rest;
+			reason.trim();
 		}
 		MeHelpServ->StartReport(source.GetUser(), source.service, target, chan, reason);
 	}
@@ -2629,10 +2702,10 @@ class CommandHelpServJoin final
 {
 public:
 	CommandHelpServJoin(Module *creator)
-		: Command(creator, "helpserv/join", 2, 2)
+		: Command(creator, "helpserv/join", 2, 3)
 	{
 		SetDesc(_("Add AideMoi or SignalMoi to a channel"));
-		SetSyntax(_("\037bot\037 \037#channel\037"));
+		SetSyntax(_("\037bot\037 \037#channel\037 [\037prefix\037]"));
 		RequireUser(true);
 	}
 
@@ -2648,20 +2721,40 @@ public:
 				MeHelpServ->GetReportBot() ? MeHelpServ->GetReportBot()->nick.c_str() : "SignalMoi");
 			return;
 		}
-		Anope::string chan = params[1];
+		Anope::string prefix, chan;
+		SplitChanSpec(params[1], prefix, chan);
+		if (chan.empty())
+		{
+			if (params.size() < 3)
+			{
+				source.Reply(_("Specify a channel, for example \002+#channel\002 or \002#channel voice\002."));
+				return;
+			}
+			prefix = ParseStatusPrefix(params[1]);
+			chan = params[2];
+		}
+		else if (params.size() > 2)
+			prefix = ParseStatusPrefix(params[2]);
+		if (prefix.empty() && (params.size() < 3) && (params[1].empty() || params[1][0] == '#'))
+			prefix = MeHelpServ->PrefixFor(bi);
 		if (!chan.empty() && chan[0] != '#')
 			chan = "#" + chan;
-		if (MeHelpServ->IsHomeChannel(bi, chan) || HelpServChan::Find(MeHelpServ->QueueFor(bi), chan))
+		if (MeHelpServ->IsHomeChannel(bi, chan))
 		{
-			source.Reply(_("\002%s\002 is already on \002%s\002."), bi->nick.c_str(), chan.c_str());
+			source.Reply(_("\002%s\002 is already on its home channel \002%s\002. Change \002prefix\002 in helpserv.conf instead."),
+				bi->nick.c_str(), chan.c_str());
 			return;
 		}
-		if (!MeHelpServ->JoinUserBot(bi, chan))
+		bool updating = HelpServChan::Find(MeHelpServ->QueueFor(bi), chan);
+		if (!MeHelpServ->JoinUserBot(bi, chan, prefix))
 		{
 			source.Reply(_("Could not add \002%s\002 to \002%s\002."), bi->nick.c_str(), chan.c_str());
 			return;
 		}
-		source.Reply(_("\002%s\002 has been added to \002%s\002."), bi->nick.c_str(), chan.c_str());
+		if (updating)
+			source.Reply(_("\002%s\002 status on \002%s\002 updated."), bi->nick.c_str(), chan.c_str());
+		else
+			source.Reply(_("\002%s\002 has been added to \002%s\002."), bi->nick.c_str(), chan.c_str());
 		MeHelpServ->NotifyStaff(Anope::Format(Language::Translate(_("[%s] %s added %s to %s")),
 			MeHelpServ->GetStaffBot() ? MeHelpServ->GetStaffBot()->nick.c_str() : "HelpServ",
 			source.GetNick().c_str(), bi->nick.c_str(), chan.c_str()));
@@ -2671,7 +2764,7 @@ public:
 	{
 		this->SendSyntax(source);
 		source.Reply(" ");
-		source.Reply(_("Adds the help or report bot to a channel (with operator status on locked channels). This does not replace a BotServ assignment."));
+		source.Reply(_("Adds the help or report bot to a channel. Optional prefix: \002~\002 owner, \002&\002 admin, \002@\002 op, \002%%\002 halfop, \002+\002 voice, or names (admin, voice, none). Default comes from helpserv.conf. Example: \002JOIN AideMoi +#salon\002. This does not replace a BotServ assignment."));
 		return true;
 	}
 };
