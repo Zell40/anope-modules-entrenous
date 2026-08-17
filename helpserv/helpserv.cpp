@@ -587,6 +587,19 @@ namespace
 		SendUserPrivmsgLine(source, target, buf);
 	}
 
+	void SendUserNotice(BotInfo *source, User *target, const char *fmt, ...) ATTR_FORMAT(3, 4);
+	void SendUserNotice(BotInfo *source, User *target, const char *fmt, ...)
+	{
+		if (!source || !target || !fmt || !IRCD)
+			return;
+		const char *translated_message = Language::Translate(target, fmt);
+		Anope::string buf;
+		ANOPE_FORMAT(fmt, translated_message, buf);
+		LineWrapper lw(buf);
+		for (Anope::string line; lw.GetLine(line); )
+			IRCD->SendNotice(source, target->GetUID(), line);
+	}
+
 	class UserPrivmsgReply final
 		: public CommandReply
 	{
@@ -2660,7 +2673,7 @@ public:
 
 		if (ReportBot && c->name.equals_ci(report_channel) && c->FindUser(ReportBot))
 		{
-			SendUserPrivmsg(ReportBot, u, _("Welcome to %s. Send a private message to \002%s\002 to file a report. Describe what happened; no special command is needed. Do not discuss reports in public."),
+			SendUserNotice(ReportBot, u, _("Welcome to %s. Send a private message to \002%s\002 to file a report. Describe what happened; no special command is needed. Do not discuss reports in public."),
 				c->name.c_str(), ReportBot->nick.c_str());
 			return;
 		}
@@ -2669,9 +2682,9 @@ public:
 		if (c->name.equals_ci(staff_channel) || c->name.equals_ci(log_channel))
 			return;
 		if (!help_greeting.empty())
-			SendUserPrivmsg(AideBot, u, "%s", help_greeting.c_str());
+			SendUserNotice(AideBot, u, "%s", help_greeting.c_str());
 		else
-			SendUserPrivmsg(AideBot, u, _("Welcome to %s. Send a private message to \002%s\002 to request help. A ticket is opened only after we understand your problem."),
+			SendUserNotice(AideBot, u, _("Welcome to %s. Send a private message to \002%s\002 to request help. A ticket is opened only after we understand your problem."),
 				c->name.c_str(), AideBot->nick.c_str());
 	}
 
