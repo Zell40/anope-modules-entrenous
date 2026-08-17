@@ -2598,12 +2598,11 @@ public:
 		if (!params.empty() || source.c || !IsOurBot(source.service))
 			return EVENT_CONTINUE;
 		if (IsStaffBot(source.service))
-			source.Reply(_("\002%s\002 is the operator help desk. Tickets opened via \002%s\002 and \002%s\002 are delivered here and to \002%s\002 / \002%s\002.\n"
+			source.Reply(_("\002%s\002 is the operator help desk. Tickets opened via \002%s\002 and \002%s\002 are delivered here.\n"
 				"Helper commands: \002LIST\002, \002NEXT\002, \002PICKUP\002, \002SHOW\002, \002CLOSE\002, \002ADDNOTE\002, \002REASSIGN\002, \002JOIN\002, \002PART\002, \002BOTLIST\002, \002AUTOADD\002, \002AUTODEL\002, \002AUTOLIST\002."),
 				StaffBot->nick.c_str(),
 				AideBot ? AideBot->nick.c_str() : "AideMoi",
-				ReportBot ? ReportBot->nick.c_str() : "SignalMoi",
-				staff_channel.c_str(), log_channel.c_str());
+				ReportBot ? ReportBot->nick.c_str() : "SignalMoi");
 		else if (IsAideBot(source.service))
 			source.Reply(_("\002%s\002 is the help desk. Describe your problem in a private message; a ticket is opened only once your request is clear.\n"
 				"Helpers work from \002%s\002. User commands: \002WAIT\002 (\002ATTENDRE\002), \002STATUS\002 (\002STATUT\002), \002CANCEL\002 (\002ANNULER\002)."),
