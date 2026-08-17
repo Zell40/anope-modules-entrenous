@@ -29,8 +29,8 @@ namespace
 	Anope::string TicketNoticePrefix(const Anope::string &queue, unsigned id)
 	{
 		if (queue.equals_ci(QUEUE_REPORT))
-			return Anope::Format(Language::Translate(_("Report: ticket \002#%u\002")), id);
-		return Anope::Format(Language::Translate(_("Help request: ticket \002#%u\002")), id);
+			return Anope::Format(Language::Translate(_("[ SIGNALEMENT ] ticket \002#%u\002")), id);
+		return Anope::Format(Language::Translate(_("[ DEMANDE D'AIDE ] ticket \002#%u\002")), id);
 	}
 
 	Anope::string ChannelNameFromSpec(const Anope::string &spec)

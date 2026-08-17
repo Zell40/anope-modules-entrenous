@@ -19,12 +19,12 @@ msgid "Ticket #%u is now open. A helper will take it as soon as possible. You 
 msgstr "Le ticket #%u est maintenant ouvert. Un membre de l'équipe va s'en occuper dès que possible. Vous pouvez continuer à envoyer des messages ici ; ils seront ajoutés au ticket."
 
 #, c-format
-msgid "Help request: ticket #%u"
-msgstr "Demande d'aide : ticket #%u"
+msgid "[ DEMANDE D'AIDE ] ticket #%u"
+msgstr "[ DEMANDE D'AIDE ] ticket #%u"
 
 #, c-format
-msgid "Report: ticket #%u"
-msgstr "Signalement : ticket #%u"
+msgid "[ SIGNALEMENT ] ticket #%u"
+msgstr "[ SIGNALEMENT ] ticket #%u"
 
 #, c-format
 msgid "%s — %s: %s"
