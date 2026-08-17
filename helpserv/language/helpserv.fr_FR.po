@@ -432,4 +432,53 @@ msgstr "Ajoute le bot d'aide ou de signalement sur un salon. Préfixe optionnel 
 msgid "%s has been removed from %s."
 msgstr "%s a été retiré de %s."
 
+msgid "Add a keyword reply for AideMoi or SignalMoi"
+msgstr "Ajouter une réponse automatique pour AideMoi ou SignalMoi"
+
+msgid "Delete a keyword reply for AideMoi or SignalMoi"
+msgstr "Supprimer une réponse automatique pour AideMoi ou SignalMoi"
+
+msgid "List keyword replies for AideMoi and SignalMoi"
+msgstr "Lister les réponses automatiques d'AideMoi et SignalMoi"
+
+#, c-format
+msgid "Use AUTOADD %s keys : reply. Separate keys with a comma or /."
+msgstr "Utilisez AUTOADD %s mots-clés : réponse. Séparez les mots-clés par une virgule ou /."
+
+msgid "Could not add that keyword reply."
+msgstr "Impossible d'ajouter cette réponse automatique."
+
+#, c-format
+msgid "Reply #%u added for %s. Keys: %s"
+msgstr "Réponse #%u ajoutée pour %s. Mots-clés : %s"
+
+msgid "Adds a private-message keyword reply for AideMoi or SignalMoi. If a user writes a matching phrase in private, the bot sends the reply instead of opening a ticket immediately. Separate several keys with a comma or /. Example: AUTOADD AideMoi bannis, je suis banni : Vous pouvez trouver les règles ici : https://example.invalid/"
+msgstr "Ajoute une réponse automatique en message privé pour AideMoi ou SignalMoi. Si un utilisateur écrit une phrase correspondante en privé, le bot envoie la réponse au lieu d'ouvrir un ticket tout de suite. Séparez plusieurs mots-clés par une virgule ou /. Exemple : AUTOADD AideMoi bannis, je suis banni : Vous pouvez trouver les règles ici : https://www.reseau-entrenous.fr/aide/"
+
+#, c-format
+msgid "No keyword reply matched %s on that bot."
+msgstr "Aucune réponse automatique ne correspond à %s pour ce bot."
+
+#, c-format
+msgid "Deleted %u keyword reply."
+msgid_plural "Deleted %u keyword replies."
+msgstr[0] "%u réponse automatique supprimée."
+msgstr[1] "%u réponses automatiques supprimées."
+
+msgid "Deletes a keyword reply. Use the id from AUTOLIST, or one of the keys. Example: AUTODEL AideMoi 3"
+msgstr "Supprime une réponse automatique. Utilisez l'id de AUTOLIST, ou l'un des mots-clés. Exemple : AUTODEL AideMoi 3"
+
+#, c-format
+msgid "#%u %s — %s → %s"
+msgstr "#%u %s — %s → %s"
+
+msgid "No keyword replies."
+msgstr "Aucune réponse automatique."
+
+msgid "No keyword replies for that bot."
+msgstr "Aucune réponse automatique pour ce bot."
+
+msgid "Lists keyword replies. Optional bot name (AideMoi or SignalMoi) filters the list."
+msgstr "Liste les réponses automatiques. Le nom du bot (AideMoi ou SignalMoi) est optionnel pour filtrer."
+
 

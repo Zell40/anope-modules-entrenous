@@ -315,6 +315,39 @@ namespace
 		return false;
 	}
 
+	void SplitMatchKeys(const Anope::string &match, std::vector<Anope::string> &keys)
+	{
+		keys.clear();
+		Anope::string tmp = match;
+		tmp.replace_all_cs("/", ",");
+		commasepstream cs(tmp);
+		for (Anope::string tok; cs.GetToken(tok);)
+		{
+			tok.trim();
+			tok = FoldTriageText(tok);
+			if (!tok.empty())
+				keys.push_back(tok);
+		}
+	}
+
+	bool SplitAutoAddRest(const Anope::string &in, Anope::string &match, Anope::string &reply)
+	{
+		size_t sep = in.find(" : ");
+		size_t skip = 3;
+		if (sep == Anope::string::npos)
+		{
+			sep = in.find(':');
+			skip = 1;
+		}
+		if (sep == Anope::string::npos)
+			return false;
+		match = in.substr(0, sep);
+		reply = in.substr(sep + skip);
+		match.trim();
+		reply.trim();
+		return !match.empty() && !reply.empty();
+	}
+
 	bool LooksLikeIncident(const Anope::string &folded)
 	{
 		static const char *const phrases[] = {
@@ -846,6 +879,84 @@ public:
 	}
 };
 
+#define HELPSERV_AUTO_TYPE "HelpServAuto"
+
+class HelpServAuto;
+static std::vector<HelpServAuto *> CustomAutos;
+static unsigned NextAutoId = 1;
+
+class HelpServAuto final
+	: public Serializable
+{
+public:
+	unsigned id = 0;
+	Anope::string queue;
+	Anope::string match;
+	Anope::string reply;
+
+	HelpServAuto()
+		: Serializable(HELPSERV_AUTO_TYPE)
+	{
+		CustomAutos.push_back(this);
+	}
+
+	~HelpServAuto() override
+	{
+		auto it = std::find(CustomAutos.begin(), CustomAutos.end(), this);
+		if (it != CustomAutos.end())
+			CustomAutos.erase(it);
+	}
+
+	std::vector<Anope::string> Keys() const
+	{
+		std::vector<Anope::string> keys;
+		SplitMatchKeys(match, keys);
+		return keys;
+	}
+
+	bool Matches(const Anope::string &folded) const
+	{
+		return ContainsAnyPadded(folded, Keys());
+	}
+};
+
+class HelpServAutoType final
+	: public Serialize::Type
+{
+public:
+	HelpServAutoType(Module *owner)
+		: Serialize::Type(HELPSERV_AUTO_TYPE, owner)
+	{
+	}
+
+	void Serialize(Serializable *obj, Serialize::Data &data) const override
+	{
+		const auto *a = static_cast<const HelpServAuto *>(obj);
+		data.Store("id", a->id);
+		data.Store("queue", a->queue);
+		data.Store("match", a->match);
+		data.Store("reply", a->reply);
+	}
+
+	Serializable *Unserialize(Serializable *obj, Serialize::Data &data) const override
+	{
+		HelpServAuto *a;
+		if (obj)
+			a = anope_dynamic_static_cast<HelpServAuto *>(obj);
+		else
+			a = new HelpServAuto();
+		a->id = data.Load<unsigned>("id");
+		a->queue = data.Load("queue");
+		a->match = data.Load("match");
+		a->reply = data.Load("reply");
+		if (!a->id)
+			a->id = NextAutoId++;
+		if (a->id >= NextAutoId)
+			NextAutoId = a->id + 1;
+		return a;
+	}
+};
+
 struct HelpAutoReply final
 {
 	std::vector<Anope::string> keys;
@@ -883,6 +994,7 @@ class ModuleHelpServ
 {
 	AideTicketType ticket_type;
 	HelpServChanType chan_type;
+	HelpServAutoType auto_type;
 	Anope::map<TriageState> triages;
 	Anope::map<FloodState> floods;
 	Anope::map<time_t> limit_notices;
@@ -1488,6 +1600,9 @@ class ModuleHelpServ
 		bind_staff("JOIN", "helpserv/join");
 		bind_staff("PART", "helpserv/part");
 		bind_staff("BOTLIST", "helpserv/botlist");
+		bind_staff("AUTOADD", "helpserv/autoadd");
+		bind_staff("AUTODEL", "helpserv/autodel");
+		bind_staff("AUTOLIST", "helpserv/autolist");
 		bind_staff("LISTE", "helpserv/list", true);
 		bind_staff("SUIVANT", "helpserv/next", true);
 		bind_staff("PRENDRE", "helpserv/pickup", true);
@@ -1498,6 +1613,9 @@ class ModuleHelpServ
 		bind_staff("AJOUTER", "helpserv/join", true);
 		bind_staff("RETIRER", "helpserv/part", true);
 		bind_staff("BOTS", "helpserv/botlist", true);
+		bind_staff("AJOUTAUTO", "helpserv/autoadd", true);
+		bind_staff("SUPPRIAUTO", "helpserv/autodel", true);
+		bind_staff("LISTAUTO", "helpserv/autolist", true);
 	}
 
 public:
@@ -1505,10 +1623,11 @@ public:
 		: Module(modname, creator, PSEUDOCLIENT | THIRD)
 		, ticket_type(this)
 		, chan_type(this)
+		, auto_type(this)
 	{
 		MeHelpServ = this;
 		SetAuthor("EntreNous");
-		SetVersion("1.8");
+		SetVersion("1.9");
 		ModuleManager::SetPriority(this, I_OnInvite, PRIORITY_LAST);
 	}
 
@@ -1518,6 +1637,8 @@ public:
 			delete Tickets.back();
 		while (!ExtraJoins.empty())
 			delete ExtraJoins.back();
+		while (!CustomAutos.empty())
+			delete CustomAutos.back();
 		MeHelpServ = nullptr;
 	}
 
@@ -1768,6 +1889,94 @@ public:
 		if (ParseQueueName(nick).equals_ci(QUEUE_REPORT))
 			return ReportBot;
 		return nullptr;
+	}
+
+	Anope::string QueueFromBotParam(const Anope::string &nick)
+	{
+		BotInfo *bi = BotFromNick(nick);
+		if (!bi || IsStaffBot(bi))
+			return "";
+		return QueueFor(bi);
+	}
+
+	HelpServAuto *AddCustomAuto(const Anope::string &queue, const Anope::string &match, const Anope::string &reply)
+	{
+		std::vector<Anope::string> keys;
+		SplitMatchKeys(match, keys);
+		if (queue.empty() || keys.empty() || reply.empty())
+			return nullptr;
+		Anope::string text = reply;
+		text.replace_all_cs("\\n", "\n");
+		for (auto *a : CustomAutos)
+		{
+			if (a->queue.equals_ci(queue) && a->match.equals_ci(match))
+			{
+				a->reply = text;
+				a->QueueUpdate();
+				return a;
+			}
+		}
+		auto *a = new HelpServAuto();
+		a->id = NextAutoId++;
+		a->queue = queue;
+		a->match = match;
+		a->reply = text;
+		a->QueueUpdate();
+		return a;
+	}
+
+	unsigned DelCustomAuto(const Anope::string &queue, const Anope::string &spec)
+	{
+		if (queue.empty() || spec.empty())
+			return 0;
+		bool by_id = true;
+		for (char c : spec)
+		{
+			if (c < '0' || c > '9')
+			{
+				by_id = false;
+				break;
+			}
+		}
+		unsigned id = by_id ? Anope::TryConvert<unsigned>(spec).value_or(0) : 0;
+		if (by_id && !id && spec != "0")
+			by_id = false;
+		Anope::string folded = FoldTriageText(spec);
+		unsigned n = 0;
+		for (size_t i = 0; i < CustomAutos.size(); )
+		{
+			HelpServAuto *a = CustomAutos[i];
+			if (!a->queue.equals_ci(queue))
+			{
+				++i;
+				continue;
+			}
+			bool hit = by_id && a->id == id;
+			if (!hit && !by_id)
+			{
+				if (a->match.equals_ci(spec))
+					hit = true;
+				else
+				{
+					for (const auto &k : a->Keys())
+					{
+						if (k.equals_ci(folded))
+						{
+							hit = true;
+							break;
+						}
+					}
+				}
+			}
+			if (hit)
+			{
+				delete a;
+				++n;
+				continue;
+			}
+			++i;
+		}
+		return n;
 	}
 
 	bool IsStaff(User *u) const
@@ -2052,6 +2261,41 @@ public:
 			auto_replies.push_back(item);
 	}
 
+	bool TryCustomReply(User *u, BotInfo *bi, const Anope::string &message, TriageState &st)
+	{
+		if (!u || !bi)
+			return false;
+		Anope::string queue = QueueFor(bi);
+		if (queue.empty() || CustomAutos.empty())
+			return false;
+		Anope::string folded = FoldTriageText(message);
+		if (folded.empty())
+			return false;
+		std::vector<HelpServAuto *> hits;
+		for (auto *a : CustomAutos)
+		{
+			if (a->queue.equals_ci(queue) && a->Matches(folded))
+				hits.push_back(a);
+		}
+		if (hits.empty())
+			return false;
+		if (st.faq_sent)
+		{
+			SendUserPrivmsg(bi, u, _("If that page is not enough, describe the problem in a few words (what you tried, and the error)."));
+			return true;
+		}
+		unsigned sent = 0;
+		for (auto *a : hits)
+		{
+			SendDocLines(u, bi, a->reply);
+			if (++sent >= 3)
+				break;
+		}
+		SendUserPrivmsg(bi, u, _("If that is not it, describe the problem in a few words."));
+		st.faq_sent = true;
+		return true;
+	}
+
 	void LoadAutoReplies(const Configuration::Block &help)
 	{
 		auto_replies.clear();
@@ -2163,6 +2407,8 @@ public:
 		}
 		st.notes.push_back(message);
 
+		if (TryCustomReply(u, bi, message, st))
+			return;
 		if (TryDocReply(u, bi, message, st))
 			return;
 
@@ -2216,6 +2462,9 @@ public:
 			st.step = 0;
 		}
 		st.notes.push_back(message);
+
+		if (TryCustomReply(u, bi, message, st))
+			return;
 
 		Anope::string nick, chan;
 		ExtractReportClues(message, u, nick, chan);
@@ -2337,7 +2586,7 @@ public:
 			return EVENT_CONTINUE;
 		if (IsStaffBot(source.service))
 			source.Reply(_("\002%s\002 is the operator help desk. Tickets opened via \002%s\002 and \002%s\002 are delivered here and to \002%s\002 / \002%s\002.\n"
-				"Helper commands: \002LIST\002, \002NEXT\002, \002PICKUP\002, \002SHOW\002, \002CLOSE\002, \002ADDNOTE\002, \002REASSIGN\002, \002JOIN\002, \002PART\002, \002BOTLIST\002."),
+				"Helper commands: \002LIST\002, \002NEXT\002, \002PICKUP\002, \002SHOW\002, \002CLOSE\002, \002ADDNOTE\002, \002REASSIGN\002, \002JOIN\002, \002PART\002, \002BOTLIST\002, \002AUTOADD\002, \002AUTODEL\002, \002AUTOLIST\002."),
 				StaffBot->nick.c_str(),
 				AideBot ? AideBot->nick.c_str() : "AideMoi",
 				ReportBot ? ReportBot->nick.c_str() : "SignalMoi",
@@ -2358,8 +2607,8 @@ public:
 		if (!params.empty() || source.c || !IsStaffBot(source.service) || !IsStaff(source.GetUser()))
 			return;
 		source.Reply(" ");
-		source.Reply(_("French aliases: \002LISTE\002, \002SUIVANT\002, \002PRENDRE\002, \002VOIR\002, \002FERMER\002, \002NOTE\002, \002REASSIGNER\002, \002AJOUTER\002, \002RETIRER\002, \002BOTS\002.\n"
-			"Queues: \002HELP\002 (\002AIDE\002) and \002REPORT\002 (\002SIGNAL\002). \002JOIN\002 / \002PART\002 add or remove \002%s\002 and \002%s\002 on channels."),
+		source.Reply(_("French aliases: \002LISTE\002, \002SUIVANT\002, \002PRENDRE\002, \002VOIR\002, \002FERMER\002, \002NOTE\002, \002REASSIGNER\002, \002AJOUTER\002, \002RETIRER\002, \002BOTS\002, \002AJOUTAUTO\002, \002SUPPRIAUTO\002, \002LISTAUTO\002.\n"
+			"Queues: \002HELP\002 (\002AIDE\002) and \002REPORT\002 (\002SIGNAL\002). \002JOIN\002 / \002PART\002 add or remove \002%s\002 and \002%s\002 on channels. \002AUTOADD\002 / \002AUTODEL\002 / \002AUTOLIST\002 manage private-message keyword replies."),
 			AideBot ? AideBot->nick.c_str() : "AideMoi",
 			ReportBot ? ReportBot->nick.c_str() : "SignalMoi");
 	}
@@ -2662,6 +2911,9 @@ public:
 	friend class CommandHelpServJoin;
 	friend class CommandHelpServPart;
 	friend class CommandHelpServBotList;
+	friend class CommandHelpServAutoAdd;
+	friend class CommandHelpServAutoDel;
+	friend class CommandHelpServAutoList;
 };
 
 class CommandHelpServWait final
@@ -3343,6 +3595,159 @@ public:
 	}
 };
 
+class CommandHelpServAutoAdd final
+	: public Command
+{
+public:
+	CommandHelpServAutoAdd(Module *creator)
+		: Command(creator, "helpserv/autoadd", 2, 2)
+	{
+		SetDesc(_("Add a keyword reply for AideMoi or SignalMoi"));
+		SetSyntax(_("\037bot\037 \037keys\037 : \037reply\037"));
+		RequireUser(true);
+	}
+
+	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
+	{
+		if (!MeHelpServ->CheckStaffSource(source))
+			return;
+		Anope::string queue = MeHelpServ->QueueFromBotParam(params[0]);
+		if (queue.empty())
+		{
+			source.Reply(_("Specify \002%s\002 or \002%s\002."),
+				MeHelpServ->GetAideBot() ? MeHelpServ->GetAideBot()->nick.c_str() : "AideMoi",
+				MeHelpServ->GetReportBot() ? MeHelpServ->GetReportBot()->nick.c_str() : "SignalMoi");
+			return;
+		}
+		Anope::string match, reply;
+		if (!SplitAutoAddRest(params[1], match, reply))
+		{
+			source.Reply(_("Use \002AUTOADD %s keys : reply\002. Separate keys with a comma or \002/\002."),
+				params[0].c_str());
+			return;
+		}
+		HelpServAuto *a = MeHelpServ->AddCustomAuto(queue, match, reply);
+		if (!a)
+		{
+			source.Reply(_("Could not add that keyword reply."));
+			return;
+		}
+		BotInfo *bi = MeHelpServ->BotForQueue(queue);
+		source.Reply(_("Reply \002#%u\002 added for \002%s\002. Keys: \002%s\002"),
+			a->id, bi ? bi->nick.c_str() : params[0].c_str(), a->match.c_str());
+	}
+
+	bool OnHelp(CommandSource &source, const Anope::string &) override
+	{
+		this->SendSyntax(source);
+		source.Reply(" ");
+		source.Reply(_("Adds a private-message keyword reply for \002AideMoi\002 or \002SignalMoi\002. If a user writes a matching phrase in private, the bot sends the reply instead of opening a ticket immediately. Separate several keys with a comma or \002/\002. Example: \002AUTOADD AideMoi bannis, je suis banni : Vous pouvez trouver les règles ici : https://example.invalid/\002"));
+		return true;
+	}
+};
+
+class CommandHelpServAutoDel final
+	: public Command
+{
+public:
+	CommandHelpServAutoDel(Module *creator)
+		: Command(creator, "helpserv/autodel", 2, 2)
+	{
+		SetDesc(_("Delete a keyword reply for AideMoi or SignalMoi"));
+		SetSyntax(_("\037bot\037 \037id\037|\037key\037"));
+		RequireUser(true);
+	}
+
+	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
+	{
+		if (!MeHelpServ->CheckStaffSource(source))
+			return;
+		Anope::string queue = MeHelpServ->QueueFromBotParam(params[0]);
+		if (queue.empty())
+		{
+			source.Reply(_("Specify \002%s\002 or \002%s\002."),
+				MeHelpServ->GetAideBot() ? MeHelpServ->GetAideBot()->nick.c_str() : "AideMoi",
+				MeHelpServ->GetReportBot() ? MeHelpServ->GetReportBot()->nick.c_str() : "SignalMoi");
+			return;
+		}
+		unsigned n = MeHelpServ->DelCustomAuto(queue, params[1]);
+		if (!n)
+		{
+			source.Reply(_("No keyword reply matched \002%s\002 on that bot."), params[1].c_str());
+			return;
+		}
+		source.Reply(n, _("Deleted \002%u\002 keyword reply."), _("Deleted \002%u\002 keyword replies."), n);
+	}
+
+	bool OnHelp(CommandSource &source, const Anope::string &) override
+	{
+		this->SendSyntax(source);
+		source.Reply(" ");
+		source.Reply(_("Deletes a keyword reply. Use the id from \002AUTOLIST\002, or one of the keys. Example: \002AUTODEL AideMoi 3\002"));
+		return true;
+	}
+};
+
+class CommandHelpServAutoList final
+	: public Command
+{
+public:
+	CommandHelpServAutoList(Module *creator)
+		: Command(creator, "helpserv/autolist", 0, 1)
+	{
+		SetDesc(_("List keyword replies for AideMoi and SignalMoi"));
+		SetSyntax(_("[\037bot\037]"));
+		RequireUser(true);
+	}
+
+	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
+	{
+		if (!MeHelpServ->CheckStaffSource(source))
+			return;
+		Anope::string queue;
+		if (!params.empty())
+		{
+			queue = MeHelpServ->QueueFromBotParam(params[0]);
+			if (queue.empty())
+			{
+				source.Reply(_("Specify \002%s\002 or \002%s\002."),
+					MeHelpServ->GetAideBot() ? MeHelpServ->GetAideBot()->nick.c_str() : "AideMoi",
+					MeHelpServ->GetReportBot() ? MeHelpServ->GetReportBot()->nick.c_str() : "SignalMoi");
+				return;
+			}
+		}
+		unsigned n = 0;
+		for (auto *a : CustomAutos)
+		{
+			if (!queue.empty() && !a->queue.equals_ci(queue))
+				continue;
+			BotInfo *bi = MeHelpServ->BotForQueue(a->queue);
+			Anope::string preview = a->reply;
+			preview.replace_all_cs("\n", " ");
+			if (preview.length() > 80)
+				preview = preview.substr(0, 77) + "...";
+			source.Reply(_("\002#%u\002 %s — \002%s\002 → %s"),
+				a->id, bi ? bi->nick.c_str() : a->queue.c_str(), a->match.c_str(), preview.c_str());
+			++n;
+		}
+		if (!n)
+		{
+			if (queue.empty())
+				source.Reply(_("No keyword replies."));
+			else
+				source.Reply(_("No keyword replies for that bot."));
+		}
+	}
+
+	bool OnHelp(CommandSource &source, const Anope::string &) override
+	{
+		this->SendSyntax(source);
+		source.Reply(" ");
+		source.Reply(_("Lists keyword replies. Optional bot name (\002AideMoi\002 or \002SignalMoi\002) filters the list."));
+		return true;
+	}
+};
+
 class ModuleHelpServCommands final
 	: public ModuleHelpServ
 {
@@ -3359,6 +3764,9 @@ class ModuleHelpServCommands final
 	CommandHelpServJoin cmdjoin;
 	CommandHelpServPart cmdpart;
 	CommandHelpServBotList cmdbotlist;
+	CommandHelpServAutoAdd cmdautoadd;
+	CommandHelpServAutoDel cmdautodel;
+	CommandHelpServAutoList cmdautolist;
 
 public:
 	ModuleHelpServCommands(const Anope::string &modname, const Anope::string &creator)
@@ -3376,6 +3784,9 @@ public:
 		, cmdjoin(this)
 		, cmdpart(this)
 		, cmdbotlist(this)
+		, cmdautoadd(this)
+		, cmdautodel(this)
+		, cmdautolist(this)
 	{
 	}
 };

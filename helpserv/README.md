@@ -34,9 +34,7 @@ Les tickets ouverts via AideMoi ou SignalMoi sont toujours notifiés par **HelpS
 
    Le `module { name = "helpserv" }` et les `service { }` sont déjà dans ce fichier. Dans `anope.conf`, n’ajoute **que** l’include ci-dessus.
 
-   Anope n’applique **que** les `include` écrits dans `anope.conf`. Un include dans `modules.conf` (ou un `module { name = "helpserv" }` vide à côté) est ignoré : les bots reviennent alors avec le nom réel « Help desk », sans `#_Robots` ni préfixes `&` / `%`.
-
-   Après démarrage, les logs doivent contenir une ligne `helpserv: applied HelpServ real="..."`. Si tu vois `was not included from anope.conf`, déplace l’include dans `anope.conf`.
+   Anope n’applique **que** les `include` écrits dans `anope.conf`. Un include dans `modules.conf` (ou un `module { name = "helpserv" }` vide à côté) est ignoré. Le module relit alors `conf/helpserv.conf` tout seul.
 
 Les personnes présentes sur `#_BO` ont les commandes d’équipe. Pour un opertype (ex. Helpeur) :
 
@@ -58,6 +56,17 @@ Ajouter un bot sur un salon (indépendant de BotServ) :
 /msg HelpServ BOTLIST
 ```
 
+Réponses automatiques en message privé (persistées, en plus de celles de `helpserv.conf`) :
+
+```
+/msg HelpServ AUTOADD AideMoi bannis, je suis banni : Vous pouvez trouver les règles ici : https://www.reseau-entrenous.fr/aide/
+/msg HelpServ AUTOADD SignalMoi harcelement : Merci, décrivez les faits sans les discuter en public.
+/msg HelpServ AUTOLIST
+/msg HelpServ AUTOLIST AideMoi
+/msg HelpServ AUTODEL AideMoi 1
+/msg HelpServ AUTODEL SignalMoi harcelement
+```
+
 Le statut sur le salon se choisit avec un préfixe (InspIRCd) : `~` fondateur, `&` admin, `@` op, `%` halfop, `+` voice, ou `none`. Par défaut c’est `op` (`@`). Sur les salons d’origine (`#Aide.chat`, `#Signalement.chat`, `#_BO`, `#_logs`), ça se règle dans `helpserv.conf` (`help { prefix }`, `report { prefix }`, `staff_prefix`) — et le même préfixe doit être devant le salon dans `service { channels }`.
 
 AideMoi et SignalMoi apparaissent dans `/bs botlist` mais **ne peuvent pas** être assignés avec BotServ. Seul HelpServ peut les placer :
@@ -68,7 +77,7 @@ AideMoi et SignalMoi apparaissent dans `/bs botlist` mais **ne peuvent pas** êt
 
 Un `/msg BotServ ASSIGN #salon AideMoi` (ou une invitation du bot) est refusé avec un message d’erreur.
 
-Alias FR : `LISTE`, `SUIVANT`, `PRENDRE`, `VOIR`, `FERMER`, `NOTE`, `REASSIGNER`, `AJOUTER`, `RETIRER`, `BOTS`.
+Alias FR : `LISTE`, `SUIVANT`, `PRENDRE`, `VOIR`, `FERMER`, `NOTE`, `REASSIGNER`, `AJOUTER`, `RETIRER`, `BOTS`, `AJOUTAUTO`, `SUPPRIAUTO`, `LISTAUTO`.
 
 ## Commandes utilisateurs
 
@@ -79,7 +88,7 @@ Un ticket n’est **pas** ouvert sur un salut ou une demande vide (« j’ai bes
 
 SignalMoi fonctionne de la même façon : on parle en message privé (qui, où, ce qui s’est passé). Le ticket s’ouvre tout seul, sans taper `REPORT`. Les non-inscrits peuvent demander de l’aide et signaler ; le spam est limité par IP/hôte (flood, reconnexion, quotas horaires).
 
-Les questions d’utilisation reçoivent d’abord **une** page d’aide EntreNous (ou le lien général https://www.reseau-entrenous.fr/aide/), pas une liste de liens. Un incident (erreur, nick pris, « je n’arrive pas… ») ouvre toujours un ticket. D’autres réponses auto peuvent être ajoutées dans `helpserv.conf` (`help { auto { match; reply } }`).
+Les questions d’utilisation reçoivent d’abord **une** page d’aide EntreNous (ou le lien général https://www.reseau-entrenous.fr/aide/), pas une liste de liens. Un incident (erreur, nick pris, « je n’arrive pas… ») ouvre toujours un ticket. D’autres réponses auto peuvent être ajoutées dans `helpserv.conf` (`help { auto { match; reply } }`) ou en IRC avec `AUTOADD`.
 
 Quand un aidant prend un ticket (`NEXT` / `PICKUP`), l’ouvreur est prévenu en message privé (AideMoi ou SignalMoi). S’il est déjà sur `#Aide.chat` ou `#Signalement.chat`, il reçoit le voice (`+v`). Sinon il est invité sur le salon ; le voice est posé dès qu’il rejoint.
 
