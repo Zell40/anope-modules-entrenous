@@ -531,7 +531,7 @@ namespace
 			|| ag.HasPriv("OWNER") || ag.HasPriv("FOUNDER") || ag.founder;
 	}
 
-	void SendUserPrivmsg(BotInfo *source, User *target, const Anope::string &msg, const Anope::string &msgid = "")
+	void SendUserPrivmsgLine(BotInfo *source, User *target, const Anope::string &msg, const Anope::string &msgid = "")
 	{
 		if (!source || !target || msg.empty() || !IRCD)
 			return;
@@ -543,14 +543,14 @@ namespace
 			IRCD->SendPrivmsg(source, target->GetUID(), line, tags);
 	}
 
-	void SendUserPrivmsg(BotInfo *source, User *target, const char *fmt, ...)
+	void SendUserPrivmsg(BotInfo *source, User *target, const char *fmt, ...) ATTR_FORMAT(3, 4)
 	{
 		if (!source || !target || !fmt)
 			return;
 		const char *translated_message = Language::Translate(target, fmt);
 		Anope::string buf;
 		ANOPE_FORMAT(fmt, translated_message, buf);
-		SendUserPrivmsg(source, target, buf);
+		SendUserPrivmsgLine(source, target, buf);
 	}
 
 	class UserPrivmsgReply final
@@ -561,11 +561,11 @@ namespace
 		explicit UserPrivmsgReply(User *t) : target(t) {}
 		void SendMessage(BotInfo *source, const Anope::string &msg) override
 		{
-			SendUserPrivmsg(source, target, msg);
+			SendUserPrivmsgLine(source, target, msg);
 		}
 		void SendMessage(CommandSource &source, const Anope::string &msg) override
 		{
-			SendUserPrivmsg(source.service, target, msg, source.msgid);
+			SendUserPrivmsgLine(source.service, target, msg, source.msgid);
 		}
 	};
 }
