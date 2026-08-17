@@ -70,7 +70,7 @@ Alias FR : `LISTE`, `SUIVANT`, `PRENDRE`, `VOIR`, `FERMER`, `NOTE`, `REASSIGNER`
 
 Un ticket n’est **pas** ouvert sur un salut ou une demande vide (« j’ai besoin d’aide », « aidez-moi », « help »). AideMoi redemande le problème (pseudo, salon, connexion, erreur). Le ticket s’ouvre seulement quand il reste une vraie description. Les messages de triage restent dans l’historique du ticket. `QUIT` pendant ce dialogue abandonne le triage (aucun ticket).
 
-SignalMoi fonctionne de la même façon : on parle en message privé (qui, où, ce qui s’est passé). Le ticket s’ouvre tout seul, sans taper `REPORT`.
+SignalMoi fonctionne de la même façon : on parle en message privé (qui, où, ce qui s’est passé). Le ticket s’ouvre tout seul, sans taper `REPORT`. Les non-inscrits peuvent demander de l’aide et signaler ; le spam est limité par IP/hôte (flood, reconnexion, quotas horaires).
 
 Les questions d’utilisation reçoivent d’abord les pages d’aide EntreNous (webchat, NickServ, Gaya, serveur, aide générale) sans ticket. Un incident (erreur, nick pris, « je n’arrive pas… ») ouvre toujours un ticket. D’autres réponses auto peuvent être ajoutées dans `helpserv.conf` (`help { auto { match; reply } }`).
 

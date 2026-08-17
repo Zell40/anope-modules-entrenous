@@ -17,6 +17,21 @@ namespace
 	const char *const STATUS_ASSIGNED = "ASSIGNED";
 	const char *const STATUS_CLOSED = "CLOSED";
 
+	Anope::string SpamKey(const User *u)
+	{
+		if (!u)
+			return "";
+		if (u->ip.valid())
+		{
+			Anope::string ip = u->ip.addr();
+			if (!ip.empty() && ip != "0.0.0.0" && ip != "::" && ip != "0")
+				return "ip:" + ip;
+		}
+		if (!u->host.empty())
+			return "host:" + u->host;
+		return "";
+	}
+
 	Anope::string ParseQueueName(const Anope::string &s)
 	{
 		if (s.equals_ci("HELP") || s.equals_ci("AIDE") || s.equals_ci("AIDEMOI"))
@@ -450,6 +465,7 @@ public:
 	Anope::string opener_account;
 	Anope::string opener_host;
 	Anope::string opener_uid;
+	Anope::string opener_ip;
 	Anope::string target_nick;
 	Anope::string target_account;
 	Anope::string category;
@@ -540,6 +556,7 @@ public:
 		if (!u)
 			return nullptr;
 		Anope::string account = u->Account() ? u->Account()->display : "";
+		Anope::string key = SpamKey(u);
 		for (auto *t : Tickets)
 		{
 			if (t->queue.equals_ci(queue) && !t->status.equals_ci(STATUS_CLOSED)
@@ -547,6 +564,16 @@ public:
 					|| t->opener_nick.equals_ci(u->nick)
 					|| (!account.empty() && t->opener_account.equals_ci(account))))
 				return t;
+		}
+		/* Unregistered reconnects: keep one open ticket per host/IP. */
+		if (account.empty() && !key.empty())
+		{
+			for (auto *t : Tickets)
+			{
+				if (t->queue.equals_ci(queue) && !t->status.equals_ci(STATUS_CLOSED)
+					&& t->opener_account.empty() && t->opener_ip.equals_ci(key))
+					return t;
+			}
 		}
 		return nullptr;
 	}
@@ -571,6 +598,7 @@ public:
 		data.Store("opener_account", t->opener_account);
 		data.Store("opener_host", t->opener_host);
 		data.Store("opener_uid", t->opener_uid);
+		data.Store("opener_ip", t->opener_ip);
 		data.Store("target_nick", t->target_nick);
 		data.Store("target_account", t->target_account);
 		data.Store("category", t->category);
@@ -600,6 +628,7 @@ public:
 		t->opener_account = data.Load("opener_account");
 		t->opener_host = data.Load("opener_host");
 		t->opener_uid = data.Load("opener_uid");
+		t->opener_ip = data.Load("opener_ip");
 		t->target_nick = data.Load("target_nick");
 		t->target_account = data.Load("target_account");
 		t->category = data.Load("category");
@@ -708,6 +737,14 @@ struct TriageState final
 	bool faq_sent = false;
 };
 
+struct FloodState final
+{
+	time_t last_msg = 0;
+	Anope::string last_text;
+	unsigned repeats = 0;
+	bool warned = false;
+};
+
 class ModuleHelpServ;
 
 static ModuleHelpServ *MeHelpServ = nullptr;
@@ -718,6 +755,8 @@ class ModuleHelpServ
 	AideTicketType ticket_type;
 	HelpServChanType chan_type;
 	Anope::map<TriageState> triages;
+	Anope::map<FloodState> floods;
+	Anope::map<time_t> limit_notices;
 
 	Anope::string staff_nick = "HelpServ";
 	Anope::string staff_user = "helpserv";
@@ -739,8 +778,16 @@ class ModuleHelpServ
 	Anope::string staff_channel;
 	Anope::string log_channel;
 	Anope::string help_greeting;
-	bool require_account_report = true;
+	bool require_account_report = false;
 	unsigned min_request_len = 12;
+	unsigned msg_interval = 2;
+	unsigned unreg_min_online = 20;
+	unsigned unreg_per_hour = 2;
+	unsigned unreg_per_day = 5;
+	unsigned reg_per_hour = 6;
+	unsigned reg_per_day = 15;
+	unsigned unreg_cooldown = 180;
+	unsigned ip_per_hour = 8;
 	std::vector<HelpAutoReply> auto_replies;
 
 	Reference<BotInfo> StaffBot;
@@ -1035,8 +1082,16 @@ public:
 		staff_channel = block.Get<const Anope::string>("staff_channel", "#_BO");
 		log_channel = block.Get<const Anope::string>("log_channel", "#_logs");
 		help_greeting = help.Get<const Anope::string>("greeting");
-		require_account_report = report.Get<bool>("require_account", "yes");
+		require_account_report = report.Get<bool>("require_account", "no");
 		min_request_len = block.Get<unsigned>("min_request_len", "12");
+		msg_interval = block.Get<unsigned>("msg_interval", "2");
+		unreg_min_online = block.Get<unsigned>("unreg_min_online", "20");
+		unreg_per_hour = block.Get<unsigned>("unreg_per_hour", "2");
+		unreg_per_day = block.Get<unsigned>("unreg_per_day", "5");
+		reg_per_hour = block.Get<unsigned>("reg_per_hour", "6");
+		reg_per_day = block.Get<unsigned>("reg_per_day", "15");
+		unreg_cooldown = block.Get<unsigned>("unreg_cooldown", "180");
+		ip_per_hour = block.Get<unsigned>("ip_per_hour", "8");
 		LoadAutoReplies(help);
 
 		new BindTimer(this);
@@ -1185,6 +1240,151 @@ public:
 		return true;
 	}
 
+	bool IsFlood(User *u, BotInfo *bi, const Anope::string &message)
+	{
+		if (!u || !bi || IsStaff(u))
+			return false;
+		auto &f = floods[u->GetUID()];
+		time_t now = Anope::CurTime;
+		if (msg_interval && f.last_msg && now - f.last_msg < static_cast<time_t>(msg_interval))
+		{
+			if (!f.warned)
+			{
+				u->SendMessage(bi, _("Please slow down. Wait a few seconds between messages."));
+				f.warned = true;
+			}
+			return true;
+		}
+		f.warned = false;
+		if (!message.empty() && message.equals_ci(f.last_text))
+		{
+			++f.repeats;
+			if (f.repeats >= 3)
+			{
+				if (f.repeats == 3)
+					u->SendMessage(bi, _("Repeated messages are ignored."));
+				f.last_msg = now;
+				return true;
+			}
+		}
+		else
+			f.repeats = 0;
+		f.last_text = message;
+		f.last_msg = now;
+		return false;
+	}
+
+	unsigned CountRecent(const Anope::string &queue, const Anope::string &key, const Anope::string &account, time_t since) const
+	{
+		unsigned n = 0;
+		for (const auto *t : Tickets)
+		{
+			if (!t->queue.equals_ci(queue) || t->opened < since)
+				continue;
+			if (!account.empty() && t->opener_account.equals_ci(account))
+				++n;
+			else if (account.empty() && !key.empty() && t->opener_ip.equals_ci(key))
+				++n;
+		}
+		return n;
+	}
+
+	unsigned CountRecentIp(const Anope::string &queue, const Anope::string &key, time_t since) const
+	{
+		if (key.empty())
+			return 0;
+		unsigned n = 0;
+		for (const auto *t : Tickets)
+		{
+			if (t->queue.equals_ci(queue) && t->opened >= since && t->opener_ip.equals_ci(key))
+				++n;
+		}
+		return n;
+	}
+
+	time_t LastClosed(const Anope::string &queue, const Anope::string &key, const Anope::string &account) const
+	{
+		time_t last = 0;
+		for (const auto *t : Tickets)
+		{
+			if (!t->queue.equals_ci(queue) || !t->status.equals_ci(STATUS_CLOSED) || !t->closed)
+				continue;
+			bool match = false;
+			if (!account.empty() && t->opener_account.equals_ci(account))
+				match = true;
+			if (account.empty() && !key.empty() && t->opener_ip.equals_ci(key))
+				match = true;
+			if (match && t->closed > last)
+				last = t->closed;
+		}
+		return last;
+	}
+
+	void NoticeLimit(const Anope::string &queue, const User *u, const Anope::string &why)
+	{
+		Anope::string key = SpamKey(u);
+		if (key.empty())
+			key = u ? u->nick : "?";
+		time_t &seen = limit_notices[queue + " " + key];
+		if (seen && Anope::CurTime - seen < 600)
+			return;
+		seen = Anope::CurTime;
+		Anope::string label = queue.equals_ci(QUEUE_REPORT)
+			? Language::Translate(_("[ SIGNALEMENT ]"))
+			: Language::Translate(_("[ DEMANDE D'AIDE ]"));
+		const char *fmt = Language::Translate(_("%s — new ticket from %s ignored (%s)."));
+		NotifyStaff(Anope::Format(fmt, label.c_str(), u ? u->nick.c_str() : "?", why.c_str()));
+	}
+
+	bool AllowNewTicket(User *u, BotInfo *bi, const Anope::string &queue)
+	{
+		if (!u || !bi)
+			return false;
+		if (IsStaff(u))
+			return true;
+
+		if (!u->Account() && unreg_min_online && u->signon && Anope::CurTime - u->signon < static_cast<time_t>(unreg_min_online))
+		{
+			u->SendMessage(bi, _("Please wait a few seconds after connecting before opening a ticket."));
+			return false;
+		}
+
+		Anope::string key = SpamKey(u);
+		Anope::string account = u->Account() ? u->Account()->display : "";
+		time_t hour = Anope::CurTime - 3600;
+		time_t day = Anope::CurTime - 86400;
+
+		if (!u->Account() && unreg_cooldown)
+		{
+			time_t closed = LastClosed(queue, key, "");
+			if (closed && Anope::CurTime - closed < static_cast<time_t>(unreg_cooldown))
+			{
+				u->SendMessage(bi, _("You already opened a ticket recently. Please wait before opening another."));
+				NoticeLimit(queue, u, "cooldown");
+				return false;
+			}
+		}
+
+		unsigned hour_n = CountRecent(queue, key, account, hour);
+		unsigned day_n = CountRecent(queue, key, account, day);
+		unsigned hour_max = u->Account() ? reg_per_hour : unreg_per_hour;
+		unsigned day_max = u->Account() ? reg_per_day : unreg_per_day;
+		if ((hour_max && hour_n >= hour_max) || (day_max && day_n >= day_max))
+		{
+			u->SendMessage(bi, _("Too many tickets from your connection. You can still be helped: please wait, or identify to your account if you have one."));
+			NoticeLimit(queue, u, "rate limit");
+			return false;
+		}
+
+		if (ip_per_hour && CountRecentIp(queue, key, hour) >= ip_per_hour)
+		{
+			u->SendMessage(bi, _("Too many tickets from your connection. You can still be helped: please wait, or identify to your account if you have one."));
+			NoticeLimit(queue, u, "IP rate limit");
+			return false;
+		}
+		return true;
+	}
+
 	AideTicket *CreateTicket(User *u, BotInfo *bi, const Anope::string &queue, const Anope::string &summary,
 		const Anope::string &category, const Anope::string &target, const Anope::string &chan,
 		const std::vector<Anope::string> &notes)
@@ -1197,6 +1397,7 @@ public:
 		t->opener_account = u->Account() ? u->Account()->display : "";
 		t->opener_host = u->GetMask();
 		t->opener_uid = u->GetUID();
+		t->opener_ip = SpamKey(u);
 		t->target_nick = target;
 		t->category = category;
 		t->channel = chan;
@@ -1399,6 +1600,8 @@ public:
 
 		Anope::string summary = message;
 		summary.trim();
+		if (!AllowNewTicket(u, bi, QUEUE_HELP))
+			return;
 		CreateTicket(u, bi, QUEUE_HELP, summary, st.category, "", "", st.notes);
 		triages.erase(u->GetUID());
 	}
@@ -1470,6 +1673,8 @@ public:
 			st.summary = message;
 		}
 
+		if (!AllowNewTicket(u, bi, QUEUE_REPORT))
+			return;
 		CreateTicket(u, bi, QUEUE_REPORT, st.summary, st.category, st.target, st.channel, st.notes);
 		triages.erase(u->GetUID());
 		u->SendMessage(bi, _("If you have screenshots, logs, or extra details, send them now as private messages."));
@@ -1491,6 +1696,8 @@ public:
 
 		if (LooksLikeRequest(reason, min_request_len))
 		{
+			if (!AllowNewTicket(u, bi, QUEUE_REPORT))
+				return;
 			std::vector<Anope::string> notes;
 			notes.push_back(reason);
 			CreateTicket(u, bi, QUEUE_REPORT, reason, "", target, chan, notes);
@@ -1570,6 +1777,8 @@ public:
 
 		if (LooksLikeCommand(u, bi, message))
 			return EVENT_CONTINUE;
+		if (IsFlood(u, bi, message))
+			return EVENT_STOP;
 
 		if (IsAideBot(bi))
 			HandleHelpDialogue(u, bi, message);
@@ -1641,6 +1850,7 @@ public:
 		if (!u)
 			return;
 		triages.erase(u->GetUID());
+		floods.erase(u->GetUID());
 		for (auto *t : Tickets)
 		{
 			if (t->status.equals_ci(STATUS_CLOSED))
@@ -1732,6 +1942,12 @@ public:
 		if (t->opener_uid != u->GetUID())
 		{
 			t->opener_uid = u->GetUID();
+			dirty = true;
+		}
+		Anope::string key = SpamKey(u);
+		if (!key.empty() && t->opener_ip != key)
+		{
+			t->opener_ip = key;
 			dirty = true;
 		}
 		if (u->Account() && t->opener_account != u->Account()->display)

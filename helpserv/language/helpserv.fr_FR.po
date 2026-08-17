@@ -19,6 +19,32 @@ msgid "Ticket #%u is now open. A helper will take it as soon as possible. You 
 msgstr "Le ticket #%u est maintenant ouvert. Un membre de l'équipe va s'en occuper dès que possible. Vous pouvez continuer à envoyer des messages ici ; ils seront ajoutés au ticket."
 
 #, c-format
+msgid "[ DEMANDE D'AIDE ]"
+msgstr "[ DEMANDE D'AIDE ]"
+
+msgid "[ SIGNALEMENT ]"
+msgstr "[ SIGNALEMENT ]"
+
+#, c-format
+msgid "%s — new ticket from %s ignored (%s)."
+msgstr "%s — nouveau ticket de %s ignoré (%s)."
+
+msgid "Please slow down. Wait a few seconds between messages."
+msgstr "Merci de patienter quelques secondes entre les messages."
+
+msgid "Repeated messages are ignored."
+msgstr "Les messages répétés sont ignorés."
+
+msgid "Please wait a few seconds after connecting before opening a ticket."
+msgstr "Merci d'attendre quelques secondes après la connexion avant d'ouvrir un ticket."
+
+msgid "You already opened a ticket recently. Please wait before opening another."
+msgstr "Vous avez déjà ouvert un ticket récemment. Merci d'attendre avant d'en ouvrir un autre."
+
+msgid "Too many tickets from your connection. You can still be helped: please wait, or identify to your account if you have one."
+msgstr "Trop de tickets depuis votre connexion. Vous pouvez toujours être aidé : patientez, ou identifiez-vous si vous avez un compte."
+
+#, c-format
 msgid "[ DEMANDE D'AIDE ] ticket #%u"
 msgstr "[ DEMANDE D'AIDE ] ticket #%u"
 
