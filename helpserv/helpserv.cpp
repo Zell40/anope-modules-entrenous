@@ -754,6 +754,53 @@ public:
 	}
 };
 
+namespace
+{
+	Anope::string TicketStatusLabel(const AideTicket *t, const NickCore *nc = nullptr)
+	{
+		if (!t)
+			return "";
+		if (t->status.equals_ci(STATUS_ASSIGNED) && !t->assignee.empty())
+			return Anope::Format(Language::Translate(nc, _("waiting on %s")), t->assignee.c_str());
+		if (t->status.equals_ci(STATUS_OPEN))
+			return Language::Translate(nc, _("waiting"));
+		if (t->status.equals_ci(STATUS_CLOSED))
+		{
+			if (!t->close_reason.empty() && !t->close_reason.equals_ci("closed"))
+				return Anope::Format(Language::Translate(nc, _("Closed (%s)")), t->close_reason.c_str());
+			return Language::Translate(nc, _("Closed"));
+		}
+		return t->status;
+	}
+
+	bool TicketMatchesListFilter(const AideTicket *t, const Anope::string &filter, const Anope::string &me)
+	{
+		if (!t)
+			return false;
+		if (filter.equals_ci("UNASSIGNED") || filter.equals_ci("OPEN") || filter.equals_ci("WAITING")
+			|| filter.equals_ci("ATTENTE"))
+			return t->status.equals_ci(STATUS_OPEN);
+		if (filter.equals_ci("ASSIGNED") || filter.equals_ci("ATTRIBUE") || filter.equals_ci("TRAITEMENT"))
+			return t->status.equals_ci(STATUS_ASSIGNED);
+		if (filter.equals_ci("CLOSED") || filter.equals_ci("FERME"))
+			return t->status.equals_ci(STATUS_CLOSED);
+		if (filter.equals_ci("ME") || filter.equals_ci("MOI"))
+			return t->assignee.equals_ci(me) && !t->status.equals_ci(STATUS_CLOSED);
+		if (filter.equals_ci("ALL") || filter.equals_ci("TOUS"))
+			return true;
+		return t->status.equals_ci(STATUS_OPEN) || t->status.equals_ci(STATUS_ASSIGNED);
+	}
+
+	Anope::string TruncateSummary(Anope::string summary, size_t max_len = 80)
+	{
+		if (summary.length() <= max_len)
+			return summary;
+		if (max_len < 3)
+			return summary.substr(0, max_len);
+		return summary.substr(0, max_len - 3) + "...";
+	}
+}
+
 class AideTicketType final
 	: public Serialize::Type
 {
@@ -1046,6 +1093,8 @@ class ModuleHelpServ
 	unsigned unreg_cooldown = 180;
 	unsigned ip_per_hour = 8;
 	time_t ticket_expire = 0;
+	time_t ticket_retain = 0;
+	time_t ticket_reminder = 0;
 	std::vector<HelpAutoReply> auto_replies;
 	struct ServiceSnap final
 	{
@@ -1074,6 +1123,26 @@ class ModuleHelpServ
 			return false;
 		}
 	};
+
+	class ReminderTimer final
+		: public Timer
+	{
+		ModuleHelpServ *mod;
+	public:
+		ReminderTimer(ModuleHelpServ *m, time_t interval)
+			: Timer(m, interval)
+			, mod(m)
+		{
+		}
+
+		bool Tick() override
+		{
+			mod->RemindPendingTickets();
+			return true;
+		}
+	};
+
+	ReminderTimer *reminder_timer = nullptr;
 
 	void ChanMsg(BotInfo *bi, const Anope::string &chan, const Anope::string &msg)
 	{
@@ -1608,6 +1677,7 @@ class ModuleHelpServ
 		bind_staff("PICKUP", "helpserv/pickup");
 		bind_staff("SHOW", "helpserv/show");
 		bind_staff("CLOSE", "helpserv/close");
+		bind_staff("REOPEN", "helpserv/reopen");
 		bind_staff("ADDNOTE", "helpserv/addnote");
 		bind_staff("REASSIGN", "helpserv/reassign");
 		bind_staff("JOIN", "helpserv/join");
@@ -1621,6 +1691,7 @@ class ModuleHelpServ
 		bind_staff("PRENDRE", "helpserv/pickup", true);
 		bind_staff("VOIR", "helpserv/show", true);
 		bind_staff("FERMER", "helpserv/close", true);
+		bind_staff("REOUVRIR", "helpserv/reopen", true);
 		bind_staff("NOTE", "helpserv/addnote", true);
 		bind_staff("REASSIGNER", "helpserv/reassign", true);
 		bind_staff("AJOUTER", "helpserv/join", true);
@@ -1640,7 +1711,7 @@ public:
 	{
 		MeHelpServ = this;
 		SetAuthor("EntreNous");
-		SetVersion("1.9");
+		SetVersion("1.11");
 		ModuleManager::SetPriority(this, I_OnInvite, PRIORITY_LAST);
 	}
 
@@ -1653,6 +1724,63 @@ public:
 		while (!CustomAutos.empty())
 			delete CustomAutos.back();
 		MeHelpServ = nullptr;
+	}
+
+	void RestartReminderTimer()
+	{
+		if (reminder_timer)
+		{
+			delete reminder_timer;
+			reminder_timer = nullptr;
+		}
+		if (ticket_reminder > 0)
+			reminder_timer = new ReminderTimer(this, ticket_reminder);
+	}
+
+	void RemindPendingTickets()
+	{
+		if (!ticket_reminder || Anope::ReadOnly || !IRCD)
+			return;
+
+		unsigned waiting = 0, assigned = 0;
+		std::vector<AideTicket *> pending;
+		for (auto *t : Tickets)
+		{
+			if (!t)
+				continue;
+			if (t->status.equals_ci(STATUS_OPEN))
+			{
+				++waiting;
+				pending.push_back(t);
+			}
+			else if (t->status.equals_ci(STATUS_ASSIGNED))
+			{
+				++assigned;
+				pending.push_back(t);
+			}
+		}
+		if (pending.empty())
+			return;
+
+		const char *hfmt = Language::Translate(_("Reminder — %u waiting, %u being handled:"));
+		NotifyStaff(Anope::Format(hfmt, waiting, assigned));
+
+		const size_t max_show = 8;
+		size_t shown = 0;
+		for (auto *t : pending)
+		{
+			if (shown >= max_show)
+				break;
+			const char *lfmt = Language::Translate(_("%s — %s — %s: %s"));
+			NotifyStaff(Anope::Format(lfmt, TicketNoticePrefix(t->queue, t->id).c_str(),
+				TicketStatusLabel(t).c_str(), t->opener_nick.c_str(), TruncateSummary(t->summary).c_str()));
+			++shown;
+		}
+		if (pending.size() > max_show)
+		{
+			const char *mfmt = Language::Translate(_("...and %u more open ticket(s). Use LIST."));
+			NotifyStaff(Anope::Format(mfmt, static_cast<unsigned>(pending.size() - max_show)));
+		}
 	}
 
 	void BindAll()
@@ -1742,6 +1870,11 @@ public:
 		unreg_cooldown = block.Get<unsigned>("unreg_cooldown", "180");
 		ip_per_hour = block.Get<unsigned>("ip_per_hour", "8");
 		ticket_expire = block.Get<time_t>("ticket_expire", "7d");
+		ticket_retain = block.Get<time_t>("ticket_retain", "0");
+		ticket_reminder = block.Get<time_t>("ticket_reminder", "15m");
+		if (ticket_reminder > 0 && ticket_reminder < 60)
+			ticket_reminder = 60;
+		RestartReminderTimer();
 		LoadAutoReplies(help);
 		LogAppliedConfig();
 
@@ -1788,7 +1921,9 @@ public:
 
 	void OnExpireTick() override
 	{
-		if (!ticket_expire || Anope::NoExpire || Anope::ReadOnly)
+		if (Anope::NoExpire || Anope::ReadOnly)
+			return;
+		if (!ticket_expire && !ticket_retain)
 			return;
 
 		for (size_t i = 0; i < Tickets.size(); )
@@ -1802,14 +1937,17 @@ public:
 
 			if (t->status.equals_ci(STATUS_CLOSED))
 			{
-				time_t since = t->closed ? t->closed : (t->updated ? t->updated : t->opened);
-				if (since && Anope::CurTime - since >= ticket_expire)
+				if (ticket_retain)
 				{
-					delete t;
-					continue;
+					time_t since = t->closed ? t->closed : (t->updated ? t->updated : t->opened);
+					if (since && Anope::CurTime - since >= ticket_retain)
+					{
+						delete t;
+						continue;
+					}
 				}
 			}
-			else
+			else if (ticket_expire)
 			{
 				time_t since = t->updated ? t->updated : t->opened;
 				if (since && Anope::CurTime - since >= ticket_expire)
@@ -2599,7 +2737,7 @@ public:
 			return EVENT_CONTINUE;
 		if (IsStaffBot(source.service))
 			source.Reply(_("\002%s\002 is the operator help desk. Tickets opened via \002%s\002 and \002%s\002 are delivered here.\n"
-				"Helper commands: \002LIST\002, \002NEXT\002, \002PICKUP\002, \002SHOW\002, \002CLOSE\002, \002ADDNOTE\002, \002REASSIGN\002, \002JOIN\002, \002PART\002, \002BOTLIST\002, \002AUTOADD\002, \002AUTODEL\002, \002AUTOLIST\002."),
+				"Helper commands: \002LIST\002, \002NEXT\002, \002PICKUP\002, \002SHOW\002, \002CLOSE\002, \002REOPEN\002, \002ADDNOTE\002, \002REASSIGN\002, \002JOIN\002, \002PART\002, \002BOTLIST\002, \002AUTOADD\002, \002AUTODEL\002, \002AUTOLIST\002."),
 				StaffBot->nick.c_str(),
 				AideBot ? AideBot->nick.c_str() : "AideMoi",
 				ReportBot ? ReportBot->nick.c_str() : "SignalMoi");
@@ -2619,7 +2757,7 @@ public:
 		if (!params.empty() || source.c || !IsStaffBot(source.service) || !IsStaff(source.GetUser()))
 			return;
 		source.Reply(" ");
-		source.Reply(_("French aliases: \002LISTE\002, \002SUIVANT\002, \002PRENDRE\002, \002VOIR\002, \002FERMER\002, \002NOTE\002, \002REASSIGNER\002, \002AJOUTER\002, \002RETIRER\002, \002BOTS\002, \002AJOUTAUTO\002, \002SUPPRIAUTO\002, \002LISTAUTO\002.\n"
+		source.Reply(_("French aliases: \002LISTE\002, \002SUIVANT\002, \002PRENDRE\002, \002VOIR\002, \002FERMER\002, \002REOUVRIR\002, \002NOTE\002, \002REASSIGNER\002, \002AJOUTER\002, \002RETIRER\002, \002BOTS\002, \002AJOUTAUTO\002, \002SUPPRIAUTO\002, \002LISTAUTO\002.\n"
 			"Queues: \002HELP\002 (\002AIDE\002) and \002REPORT\002 (\002SIGNAL\002). \002JOIN\002 / \002PART\002 add or remove \002%s\002 and \002%s\002 on channels. \002AUTOADD\002 / \002AUTODEL\002 / \002AUTOLIST\002 manage private-message keyword replies."),
 			AideBot ? AideBot->nick.c_str() : "AideMoi",
 			ReportBot ? ReportBot->nick.c_str() : "SignalMoi");
@@ -2893,6 +3031,70 @@ public:
 		NotifyStaff(Anope::Format(afmt, TicketNoticePrefix(t->queue, t->id).c_str(), helper.c_str(), source.GetNick().c_str()));
 	}
 
+	bool SameOpener(const AideTicket *a, const AideTicket *b) const
+	{
+		if (!a || !b)
+			return false;
+		if (!a->opener_account.empty() && a->opener_account.equals_ci(b->opener_account))
+			return true;
+		if (!a->opener_uid.empty() && a->opener_uid.equals_ci(b->opener_uid))
+			return true;
+		return a->opener_account.empty() && b->opener_account.empty() && a->opener_nick.equals_ci(b->opener_nick);
+	}
+
+	AideTicket *OtherOpenTicket(const AideTicket *t) const
+	{
+		if (!t)
+			return nullptr;
+		for (auto *other : Tickets)
+		{
+			if (other == t || other->status.equals_ci(STATUS_CLOSED) || !other->queue.equals_ci(t->queue))
+				continue;
+			if (SameOpener(t, other))
+				return other;
+		}
+		return nullptr;
+	}
+
+	void ReopenTicket(CommandSource &source, AideTicket *t, const Anope::string &reason)
+	{
+		if (!t)
+			return;
+		AideTicket *other = OtherOpenTicket(t);
+		if (other)
+		{
+			source.Reply(_("Cannot reopen ticket \002#%u\002: \002%s\002 already has open ticket \002#%u\002."),
+				t->id, t->opener_nick.c_str(), other->id);
+			return;
+		}
+
+		Anope::string helper = source.GetAccount() ? source.GetAccount()->display : source.GetNick();
+		Anope::string note = reason.empty() ? "reopened" : "reopened: " + reason;
+		t->status = STATUS_ASSIGNED;
+		t->assignee = helper;
+		t->assigned = Anope::CurTime;
+		t->closed = 0;
+		t->close_reason.clear();
+		t->AddLine('S', source.GetNick(), note);
+		source.Reply(_("Ticket \002#%u\002 reopened and assigned to \002%s\002."), t->id, helper.c_str());
+
+		User *opener = FindOpener(t);
+		BotInfo *userbot = BotForQueue(t->queue);
+		Anope::string desk = DeskChannelFor(t->queue);
+		if (opener && userbot)
+		{
+			if (reason.empty())
+				SendUserPrivmsg(userbot, opener, _("Your ticket \002#%u\002 has been reopened. Helper \002%s\002 will continue with you on \002%s\002."),
+					t->id, helper.c_str(), desk.c_str());
+			else
+				SendUserPrivmsg(userbot, opener, _("Your ticket \002#%u\002 has been reopened (%s). Helper \002%s\002 will continue with you on \002%s\002."),
+					t->id, reason.c_str(), helper.c_str(), desk.c_str());
+		}
+		VoiceOpener(t, true);
+		const char *rfmt = Language::Translate(_("%s — reopened by %s, assigned to %s"));
+		NotifyStaff(Anope::Format(rfmt, TicketNoticePrefix(t->queue, t->id).c_str(), source.GetNick().c_str(), helper.c_str()));
+	}
+
 	unsigned OpenCount(const Anope::string &queue, const Anope::string &opener_nick, const Anope::string &opener_account, const Anope::string &opener_uid) const
 	{
 		unsigned pos = 0, total = 0;
@@ -2918,6 +3120,7 @@ public:
 	friend class CommandHelpServPickup;
 	friend class CommandHelpServShow;
 	friend class CommandHelpServClose;
+	friend class CommandHelpServReopen;
 	friend class CommandHelpServAddNote;
 	friend class CommandHelpServReassign;
 	friend class CommandHelpServJoin;
@@ -3086,7 +3289,7 @@ public:
 			return;
 
 		Anope::string queue;
-		Anope::string filter = "UNASSIGNED";
+		Anope::string filter = "ALL";
 		for (const auto &p : params)
 		{
 			Anope::string q = ParseQueueName(p);
@@ -3101,30 +3304,33 @@ public:
 		list.AddColumn(_("ID")).AddColumn(_("Queue")).AddColumn(_("Status")).AddColumn(_("Opener")).AddColumn(_("Helper")).AddColumn(_("Summary"));
 		list.SetFlexible(_("{id} ({queue}/{status}) {opener} — {summary}"));
 
-		for (auto *t : Tickets)
+		auto add_ticket = [&](AideTicket *t)
 		{
-			if (!queue.empty() && !t->queue.equals_ci(queue))
-				continue;
-			if (filter.equals_ci("UNASSIGNED") && !t->status.equals_ci(STATUS_OPEN))
-				continue;
-			if (filter.equals_ci("ASSIGNED") && !t->status.equals_ci(STATUS_ASSIGNED))
-				continue;
-			if (filter.equals_ci("CLOSED") && !t->status.equals_ci(STATUS_CLOSED))
-				continue;
-			if (filter.equals_ci("ME") && !t->assignee.equals_ci(me))
-				continue;
-			if ((filter.equals_ci("ALL") || filter.equals_ci("UNASSIGNED") || filter.equals_ci("ASSIGNED") || filter.equals_ci("ME"))
-				&& t->status.equals_ci(STATUS_CLOSED) && !filter.equals_ci("ALL") && !filter.equals_ci("CLOSED"))
-				continue;
-
 			ListFormatter::ListEntry entry;
 			entry["ID"] = "#" + Anope::ToString(t->id);
 			entry["Queue"] = t->queue;
-			entry["Status"] = t->status;
+			entry["Status"] = TicketStatusLabel(t, source.GetAccount());
 			entry["Opener"] = t->opener_nick;
 			entry["Helper"] = t->assignee.empty() ? "-" : t->assignee;
 			entry["Summary"] = t->summary;
 			list.AddEntry(entry);
+		};
+
+		for (auto *t : Tickets)
+		{
+			if (!queue.empty() && !t->queue.equals_ci(queue))
+				continue;
+			if (t->status.equals_ci(STATUS_CLOSED) || !TicketMatchesListFilter(t, filter, me))
+				continue;
+			add_ticket(t);
+		}
+		for (auto *t : Tickets)
+		{
+			if (!queue.empty() && !t->queue.equals_ci(queue))
+				continue;
+			if (!t->status.equals_ci(STATUS_CLOSED) || !TicketMatchesListFilter(t, filter, me))
+				continue;
+			add_ticket(t);
 		}
 
 		if (list.IsEmpty())
@@ -3137,7 +3343,7 @@ public:
 	{
 		this->SendSyntax(source);
 		source.Reply(" ");
-		source.Reply(_("Lists tickets. Default: unassigned tickets from both queues. Prefix with HELP or REPORT to filter a queue."));
+		source.Reply(_("Lists tickets. Default: waiting, assigned, and closed tickets from both queues. Assigned tickets stay listed as waiting on the helper; closed tickets stay listed as Closed. Prefix with HELP or REPORT to filter a queue. UNASSIGNED, ASSIGNED, ME, ALL, and CLOSED still work as filters."));
 		return true;
 	}
 };
@@ -3229,7 +3435,7 @@ public:
 		}
 		if (t->status.equals_ci(STATUS_CLOSED))
 		{
-			source.Reply(_("Ticket \002#%u\002 is closed."), t->id);
+			source.Reply(_("Ticket \002#%u\002 is closed. Use \002REOPEN %u\002 to restore it."), t->id, t->id);
 			return;
 		}
 		Anope::string helper = source.GetAccount() ? source.GetAccount()->display : source.GetNick();
@@ -3271,7 +3477,7 @@ public:
 			return;
 		}
 
-		source.Reply(_("Ticket \002#%u\002 (%s) — %s"), t->id, t->queue.c_str(), t->status.c_str());
+		source.Reply(_("Ticket \002#%u\002 (%s) — %s"), t->id, t->queue.c_str(), TicketStatusLabel(t, source.GetAccount()).c_str());
 		source.Reply(_("Opener: %s (%s) account: %s"), t->opener_nick.c_str(), t->opener_host.c_str(),
 			t->opener_account.empty() ? "-" : t->opener_account.c_str());
 		if (!t->target_nick.empty())
@@ -3279,6 +3485,9 @@ public:
 		if (!t->channel.empty())
 			source.Reply(_("Channel: %s"), t->channel.c_str());
 		source.Reply(_("Opened: %s"), Anope::strftime(t->opened, source.GetAccount(), true).c_str());
+		if (t->status.equals_ci(STATUS_CLOSED) && t->closed)
+			source.Reply(_("Closed: %s (%s)"), Anope::strftime(t->closed, source.GetAccount(), true).c_str(),
+				t->close_reason.empty() ? "-" : t->close_reason.c_str());
 		if (!t->assignee.empty())
 			source.Reply(_("Helper: %s"), t->assignee.c_str());
 		source.Reply(_("Summary: %s"), t->summary.c_str());
@@ -3295,7 +3504,7 @@ public:
 	{
 		this->SendSyntax(source);
 		source.Reply(" ");
-		source.Reply(_("Shows the full ticket, including private messages and helper notes."));
+		source.Reply(_("Shows the full ticket, including private messages and helper notes. Closed tickets stay available here and in \002LIST CLOSED\002."));
 		return true;
 	}
 };
@@ -3357,7 +3566,49 @@ public:
 	{
 		this->SendSyntax(source);
 		source.Reply(" ");
-		source.Reply(_("Closes a ticket. The opener is notified."));
+		source.Reply(_("Closes a ticket. The opener is notified. The ticket stays in \002LIST CLOSED\002 and can be restored with \002REOPEN\002."));
+		return true;
+	}
+};
+
+class CommandHelpServReopen final
+	: public Command
+{
+public:
+	CommandHelpServReopen(Module *creator)
+		: Command(creator, "helpserv/reopen", 1, 2)
+	{
+		SetDesc(_("Reopen a closed ticket"));
+		SetSyntax(_("\037id\037 [\037reason\037]"));
+		RequireUser(true);
+	}
+
+	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
+	{
+		if (!MeHelpServ->CheckStaffSource(source))
+			return;
+		Anope::string key = params[0];
+		if (!key.empty() && key[0] == '#')
+			key.erase(key.begin());
+		auto *t = AideTicket::FindId(Anope::Convert<unsigned>(key, 0));
+		if (!t)
+		{
+			source.Reply(_("Ticket not found."));
+			return;
+		}
+		if (!t->status.equals_ci(STATUS_CLOSED))
+		{
+			source.Reply(_("Ticket \002#%u\002 is not closed."), t->id);
+			return;
+		}
+		MeHelpServ->ReopenTicket(source, t, params.size() > 1 ? params[1] : "");
+	}
+
+	bool OnHelp(CommandSource &source, const Anope::string &) override
+	{
+		this->SendSyntax(source);
+		source.Reply(" ");
+		source.Reply(_("Restores a closed ticket with its history and assigns it to you. The opener is notified."));
 		return true;
 	}
 };
@@ -3420,9 +3671,14 @@ public:
 		if (!key.empty() && key[0] == '#')
 			key.erase(key.begin());
 		auto *t = AideTicket::FindId(Anope::Convert<unsigned>(key, 0));
-		if (!t || t->status.equals_ci(STATUS_CLOSED))
+		if (!t)
 		{
 			source.Reply(_("Ticket not found."));
+			return;
+		}
+		if (t->status.equals_ci(STATUS_CLOSED))
+		{
+			source.Reply(_("Ticket \002#%u\002 is closed. Use \002REOPEN %u\002 to restore it."), t->id, t->id);
 			return;
 		}
 		MeHelpServ->Assign(source, t, params[1]);
@@ -3771,6 +4027,7 @@ class ModuleHelpServCommands final
 	CommandHelpServPickup cmdpickup;
 	CommandHelpServShow cmdshow;
 	CommandHelpServClose cmdclose;
+	CommandHelpServReopen cmdreopen;
 	CommandHelpServAddNote cmdnote;
 	CommandHelpServReassign cmdreassign;
 	CommandHelpServJoin cmdjoin;
@@ -3791,6 +4048,7 @@ public:
 		, cmdpickup(this)
 		, cmdshow(this)
 		, cmdclose(this)
+		, cmdreopen(this)
 		, cmdnote(this)
 		, cmdreassign(this)
 		, cmdjoin(this)

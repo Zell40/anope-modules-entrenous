@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: GPL-2.0-only
 msgid ""
 msgstr ""
-"Project-Id-Version: helpserv 1.0\n"
+"Project-Id-Version: helpserv 1.11\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-08-14 14:00+0200\n"
-"PO-Revision-Date: 2026-08-14 14:00+0200\n"
+"PO-Revision-Date: 2026-08-17 17:45+0200\n"
 "Last-Translator: EntreNous\n"
 "Language-Team: French\n"
 "Language: fr_FR\n"
@@ -141,6 +141,22 @@ msgstr ""
 "%s est le service de signalement. Décrivez le signalement en message privé ; un ticket est ouvert une fois que l'on sait qui et ce qui s'est passé. N'en discutez pas en public.\n"
 "Les signalements sont traités par %s. Commandes utilisateur : WAIT, STATUS, CANCEL."
 
+#, c-format
+msgid ""
+"%s is the operator help desk. Tickets opened via %s and %s are delivered here.\n"
+"Helper commands: LIST, NEXT, PICKUP, SHOW, CLOSE, REOPEN, ADDNOTE, REASSIGN, JOIN, PART, BOTLIST, AUTOADD, AUTODEL, AUTOLIST."
+msgstr ""
+"%s est le service opérateurs. Les tickets ouverts via %s et %s arrivent ici.\n"
+"Commandes de l'équipe : LIST, NEXT, PICKUP, SHOW, CLOSE, REOPEN, ADDNOTE, REASSIGN, JOIN, PART, BOTLIST, AUTOADD, AUTODEL, AUTOLIST."
+
+#, c-format
+msgid ""
+"French aliases: LISTE, SUIVANT, PRENDRE, VOIR, FERMER, REOUVRIR, NOTE, REASSIGNER, AJOUTER, RETIRER, BOTS, AJOUTAUTO, SUPPRIAUTO, LISTAUTO.\n"
+"Queues: HELP (AIDE) and REPORT (SIGNAL). JOIN / PART add or remove %s and %s on channels. AUTOADD / AUTODEL / AUTOLIST manage private-message keyword replies."
+msgstr ""
+"Alias français : LISTE, SUIVANT, PRENDRE, VOIR, FERMER, REOUVRIR, NOTE, REASSIGNER, AJOUTER, RETIRER, BOTS, AJOUTAUTO, SUPPRIAUTO, LISTAUTO.\n"
+"Files : HELP (AIDE) et REPORT (SIGNAL). JOIN / PART ajoutent ou retirent %s et %s sur les salons. AUTOADD / AUTODEL / AUTOLIST gèrent les réponses automatiques en message privé."
+
 msgid ""
 "Helper commands: LIST, NEXT, PICKUP, SHOW, CLOSE, ADDNOTE, REASSIGN.\n"
 "French aliases: LISTE, SUIVANT, PRENDRE, VOIR, FERMER, NOTE, REASSIGNER."
@@ -256,11 +272,40 @@ msgstr "Résumé"
 msgid "{id} ({queue}/{status}) {opener} — {summary}"
 msgstr "{id} ({queue}/{status}) {opener} — {summary}"
 
+msgid "waiting"
+msgstr "en attente"
+
+#, c-format
+msgid "waiting on %s"
+msgstr "en attente de traitement par %s"
+
+msgid "Closed"
+msgstr "Fermé"
+
+#, c-format
+msgid "Closed (%s)"
+msgstr "Fermé (%s)"
+
+#, c-format
+msgid "Reminder — %u waiting, %u being handled:"
+msgstr "Rappel — %u en attente, %u en traitement :"
+
+#, c-format
+msgid "%s — %s — %s: %s"
+msgstr "%s — %s — %s : %s"
+
+#, c-format
+msgid "...and %u more open ticket(s). Use LIST."
+msgstr "...et %u autre(s) ticket(s) ouvert(s). Utilisez LIST."
+
 msgid "No tickets match that filter."
 msgstr "Aucun ticket ne correspond à ce filtre."
 
+msgid "Lists tickets. Default: waiting, assigned, and closed tickets from both queues. Assigned tickets stay listed as waiting on the helper; closed tickets stay listed as Closed. Prefix with HELP or REPORT to filter a queue. UNASSIGNED, ASSIGNED, ME, ALL, and CLOSED still work as filters."
+msgstr "Liste les tickets. Par défaut : tickets en attente, en traitement et fermés des deux files. Un ticket attribué reste visible (en attente de traitement par l'aidant) ; un ticket fermé reste visible (Fermé). Préfixer par HELP ou REPORT pour une file. UNASSIGNED, ASSIGNED, ME, ALL et CLOSED restent disponibles."
+
 msgid "Lists tickets for this bot's queue. Helpers see unassigned tickets by default."
-msgstr "Liste les tickets de la file de ce robot. Les aidants voient les tickets non attribués par défaut."
+msgstr "Liste les tickets. Par défaut : tickets en attente et en traitement des deux files."
 
 msgid "Take the oldest waiting ticket"
 msgstr "Prendre le plus ancien ticket en attente"
@@ -287,6 +332,10 @@ msgstr "Ticket introuvable."
 #, c-format
 msgid "Ticket #%u is closed."
 msgstr "Le ticket #%u est fermé."
+
+#, c-format
+msgid "Ticket #%u is closed. Use REOPEN %u to restore it."
+msgstr "Le ticket #%u est fermé. Utilisez REOPEN %u pour le rouvrir."
 
 msgid "Takes ticket id or the open ticket of nick."
 msgstr "Prend le ticket id ou le ticket ouvert de pseudo."
@@ -318,6 +367,10 @@ msgid "Opened: %s"
 msgstr "Ouvert : %s"
 
 #, c-format
+msgid "Closed: %s (%s)"
+msgstr "Fermé : %s (%s)"
+
+#, c-format
 msgid "Helper: %s"
 msgstr "Aidant : %s"
 
@@ -328,8 +381,8 @@ msgstr "Résumé : %s"
 msgid "Messages:"
 msgstr "Messages :"
 
-msgid "Shows the full ticket, including private messages and helper notes."
-msgstr "Affiche le ticket complet, y compris les messages privés et les notes des aidants."
+msgid "Shows the full ticket, including private messages and helper notes. Closed tickets stay available here and in LIST CLOSED."
+msgstr "Affiche le ticket complet, y compris les messages privés et les notes des aidants. Les tickets fermés restent consultables ici et avec LIST CLOSED."
 
 msgid "Close a ticket"
 msgstr "Fermer un ticket"
@@ -365,8 +418,38 @@ msgstr "Votre ticket #%u a expiré faute d'activité."
 msgid "%s — expired (inactive)"
 msgstr "%s — expiré (inactif)"
 
-msgid "Closes a ticket. The opener is notified."
-msgstr "Ferme un ticket. Le demandeur est prévenu."
+msgid "Closes a ticket. The opener is notified. The ticket stays in LIST CLOSED and can be restored with REOPEN."
+msgstr "Ferme un ticket. Le demandeur est prévenu. Le ticket reste dans LIST CLOSED et peut être restauré avec REOPEN."
+
+msgid "Reopen a closed ticket"
+msgstr "Rouvrir un ticket fermé"
+
+#, c-format
+msgid "Ticket #%u is not closed."
+msgstr "Le ticket #%u n'est pas fermé."
+
+#, c-format
+msgid "Cannot reopen ticket #%u: %s already has open ticket #%u."
+msgstr "Impossible de rouvrir le ticket #%u : %s a déjà le ticket ouvert #%u."
+
+#, c-format
+msgid "Ticket #%u reopened and assigned to %s."
+msgstr "Ticket #%u rouvert et attribué à %s."
+
+#, c-format
+msgid "Your ticket #%u has been reopened. Helper %s will continue with you on %s."
+msgstr "Votre ticket #%u a été rouvert. L'aidant %s continue avec vous sur %s."
+
+#, c-format
+msgid "Your ticket #%u has been reopened (%s). Helper %s will continue with you on %s."
+msgstr "Votre ticket #%u a été rouvert (%s). L'aidant %s continue avec vous sur %s."
+
+#, c-format
+msgid "%s — reopened by %s, assigned to %s"
+msgstr "%s — rouvert par %s, attribué à %s"
+
+msgid "Restores a closed ticket with its history and assigns it to you. The opener is notified."
+msgstr "Restaure un ticket fermé avec son historique et vous l'attribue. Le demandeur est prévenu."
 
 msgid "Add an internal note to a ticket"
 msgstr "Ajouter une note interne à un ticket"

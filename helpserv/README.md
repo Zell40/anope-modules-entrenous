@@ -44,7 +44,9 @@ commands = "hostserv/* helpserv/helper"
 
 ## Commandes opérateurs (`/msg HelpServ`)
 
-`LIST` `[HELP|REPORT]` `[UNASSIGNED|ASSIGNED|ME|ALL|CLOSED]`, `NEXT` `[HELP|REPORT]`, `PICKUP`, `SHOW`, `CLOSE`, `ADDNOTE`, `REASSIGN`.
+`LIST` `[HELP|REPORT]` `[UNASSIGNED|ASSIGNED|ME|ALL|CLOSED]`, `NEXT` `[HELP|REPORT]`, `PICKUP`, `SHOW`, `CLOSE`, `REOPEN`, `ADDNOTE`, `REASSIGN`.
+
+`LIST` affiche par défaut les tickets **en attente**, **en traitement** (« en attente de traitement par X ») et **fermés** (« Fermé »). Les fermés apparaissent après les tickets encore ouverts. `LIST UNASSIGNED` / `LIST ASSIGNED` / `LIST CLOSED` filtrent. `SHOW` et `REOPEN` (`REOUVRIR`) permettent de consulter ou de relancer un ticket fermé.
 
 Ajouter un bot sur un salon (indépendant de BotServ) :
 
@@ -77,7 +79,7 @@ AideMoi et SignalMoi apparaissent dans `/bs botlist` mais **ne peuvent pas** êt
 
 Un `/msg BotServ ASSIGN #salon AideMoi` (ou une invitation du bot) est refusé avec un message d’erreur.
 
-Alias FR : `LISTE`, `SUIVANT`, `PRENDRE`, `VOIR`, `FERMER`, `NOTE`, `REASSIGNER`, `AJOUTER`, `RETIRER`, `BOTS`, `AJOUTAUTO`, `SUPPRIAUTO`, `LISTAUTO`.
+Alias FR : `LISTE`, `SUIVANT`, `PRENDRE`, `VOIR`, `FERMER`, `REOUVRIR`, `NOTE`, `REASSIGNER`, `AJOUTER`, `RETIRER`, `BOTS`, `AJOUTAUTO`, `SUPPRIAUTO`, `LISTAUTO`.
 
 ## Commandes utilisateurs
 
@@ -94,4 +96,6 @@ Quand un aidant prend un ticket (`NEXT` / `PICKUP`), l’ouvreur est prévenu en
 
 Un `PART` / kick du salon d’aide, ou un `QUIT`, n’annule pas le ticket : l’équipe est prévenue et le ticket reste ouvert. Au retour, si le ticket est encore attribué, le voice est remis. `CLOSE` retire le voice.
 
-Les tickets inactifs sont fermés automatiquement après `ticket_expire` (7 jours par défaut). Les tickets déjà fermés sont ensuite effacés de la base après le même délai. Mettre `ticket_expire = 0` pour désactiver.
+Les tickets inactifs sont fermés automatiquement après `ticket_expire` (7 jours par défaut). Les tickets fermés sont **conservés** (historique, `LIST CLOSED`, `SHOW`, `REOPEN`). Mettre `ticket_expire = 0` pour ne plus auto-fermer. `ticket_retain` (0 par défaut = jamais) efface ensuite les archives trop anciennes si on le souhaite.
+
+Un rappel automatique est envoyé sur `staff_channel` et `log_channel` toutes les `ticket_reminder` (15 minutes par défaut) tant qu’il reste des tickets en attente ou en traitement. Mettre `ticket_reminder = 0` pour désactiver.
