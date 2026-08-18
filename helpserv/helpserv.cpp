@@ -2324,8 +2324,9 @@ public:
 		Anope::string token;
 		if (!ss.GetToken(token))
 			return false;
+		BotInfo *staff = const_cast<ModuleHelpServ *>(this)->GetStaffBot();
 		if (!token.equals_ci("helpserv") && !token.equals_ci("hserv")
-			&& !(StaffBot && token.equals_ci(StaffBot->nick)))
+			&& !(staff && token.equals_ci(staff->nick)))
 			return false;
 		rest = ss.GetRemaining();
 		rest.trim();
