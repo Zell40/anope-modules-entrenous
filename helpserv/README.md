@@ -86,6 +86,8 @@ Alias FR : `LISTE`, `SUIVANT`, `PRENDRE`, `VOIR`, `FERMER`, `REOUVRIR`, `NOTE`, 
 - AideMoi : `WAIT` / `ATTENDRE`, `STATUS` / `STATUT`, `CANCEL` / `ANNULER`
 - SignalMoi : les mêmes (`REPORT` / `SIGNALER` restent optionnels)
 
+Quand un utilisateur envoie une image ou un vocal depuis Orbit (CTCP ACTION), le lien public est ajouté au ticket (`Image: https://…`). Sans ticket encore ouvert, le fichier est gardé et joint dès que la demande est décrite.
+
 Un ticket n’est **pas** ouvert sur un salut ou une demande vide (« j’ai besoin d’aide », « aidez-moi », « help »). AideMoi redemande le problème (pseudo, salon, connexion, erreur). Le ticket s’ouvre seulement quand il reste une vraie description. Les messages de triage restent dans l’historique du ticket. `QUIT` pendant ce dialogue abandonne le triage (aucun ticket).
 
 SignalMoi fonctionne de la même façon : on parle en message privé (qui, où, ce qui s’est passé). Le ticket s’ouvre tout seul, sans taper `REPORT`. Les non-inscrits peuvent demander de l’aide et signaler ; le spam est limité par IP/hôte (flood, reconnexion, quotas horaires).

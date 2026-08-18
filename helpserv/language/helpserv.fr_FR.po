@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: GPL-2.0-only
 msgid ""
 msgstr ""
-"Project-Id-Version: helpserv 1.11\n"
+"Project-Id-Version: helpserv 1.12\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-08-14 14:00+0200\n"
-"PO-Revision-Date: 2026-08-17 17:45+0200\n"
+"PO-Revision-Date: 2026-08-18 10:10+0200\n"
 "Last-Translator: EntreNous\n"
 "Language-Team: French\n"
 "Language: fr_FR\n"
@@ -67,6 +67,21 @@ msgstr "Ticket #%u nouveau message de %s : %s"
 #, c-format
 msgid "%s — update from %s: %s"
 msgstr "%s — mise à jour de %s : %s"
+
+#, c-format
+msgid "Image: %s"
+msgstr "Image : %s"
+
+#, c-format
+msgid "Voice note: %s"
+msgstr "Note vocale : %s"
+
+#, c-format
+msgid "File: %s"
+msgstr "Fichier : %s"
+
+msgid "Your file has been saved. It will be attached to the ticket once you describe the problem."
+msgstr "Votre fichier a été enregistré. Il sera joint au ticket dès que vous aurez décrit le problème."
 
 msgid "Tell me what is going wrong (what you tried, and the result). For how to use the chat: https://www.reseau-entrenous.fr/aide/"
 msgstr "Dites-moi ce qui bloque (ce que vous avez essayé, et le résultat). Pour l'utilisation du tchat : https://www.reseau-entrenous.fr/aide/"

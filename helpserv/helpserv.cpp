@@ -799,6 +799,54 @@ namespace
 			return summary.substr(0, max_len);
 		return summary.substr(0, max_len - 3) + "...";
 	}
+
+	bool ExtractHttpUrl(const Anope::string &in, Anope::string &url)
+	{
+		size_t pos = in.find("https://");
+		if (pos == Anope::string::npos)
+			pos = in.find("http://");
+		if (pos == Anope::string::npos)
+			return false;
+		size_t end = pos;
+		while (end < in.length())
+		{
+			unsigned char c = static_cast<unsigned char>(in[end]);
+			if (c <= 32 || c == '>' || c == '"' || c == '\'' || c == ')' || c == ']' || c == '\x01')
+				break;
+			++end;
+		}
+		url = in.substr(pos, end - pos);
+		while (!url.empty())
+		{
+			char last = url[url.length() - 1];
+			if (last != '.' && last != ',' && last != ';' && last != '!' && last != '?')
+				break;
+			url.erase(url.length() - 1);
+		}
+		return url.length() > 10;
+	}
+
+	Anope::string MediaTicketLine(const Anope::string &raw)
+	{
+		Anope::string plain = Anope::RemoveFormatting(raw);
+		plain.trim();
+		Anope::string url;
+		if (!ExtractHttpUrl(plain, url))
+			return plain;
+
+		Anope::string low = plain.lower();
+		Anope::string urllow = url.lower();
+		if (low.find("image") != Anope::string::npos || low.find("/files/") != Anope::string::npos
+			|| urllow.find(".png") != Anope::string::npos || urllow.find(".jpg") != Anope::string::npos
+			|| urllow.find(".jpeg") != Anope::string::npos || urllow.find(".gif") != Anope::string::npos
+			|| urllow.find(".webp") != Anope::string::npos)
+			return Anope::Format(Language::Translate(_("Image: %s")), url.c_str());
+		if (low.find("voice") != Anope::string::npos || low.find("audio") != Anope::string::npos
+			|| urllow.find(".webm") != Anope::string::npos || urllow.find(".ogg") != Anope::string::npos
+			|| urllow.find(".mp3") != Anope::string::npos || urllow.find(".m4a") != Anope::string::npos)
+			return Anope::Format(Language::Translate(_("Voice note: %s")), url.c_str());
+		return Anope::Format(Language::Translate(_("File: %s")), url.c_str());
+	}
 }
 
 class AideTicketType final
@@ -1656,6 +1704,14 @@ class ModuleHelpServ
 			bi->SetCommand("REPORT", "helpserv/report").hide = true;
 			bi->SetCommand("SIGNALER", "helpserv/report").hide = true;
 		}
+
+		// Orbit sends image/voice shares as CTCP ACTION. Anope otherwise
+		// swallows CTCPs to bots that have no handler, so the URL never
+		// reached the ticket.
+		bi->ctcps["ACTION"] = [this](BotInfo *bot, User *user, const Anope::string &body)
+		{
+			this->HandleUserAction(bot, user, body);
+		};
 	}
 
 	void BindStaffCommands(BotInfo *bi)
@@ -1711,7 +1767,7 @@ public:
 	{
 		MeHelpServ = this;
 		SetAuthor("EntreNous");
-		SetVersion("1.11");
+		SetVersion("1.12");
 		ModuleManager::SetPriority(this, I_OnInvite, PRIORITY_LAST);
 	}
 
@@ -2539,6 +2595,33 @@ public:
 		SendUserPrivmsg(bi, u, _("If that is not it, describe the problem in a few words."));
 		st.faq_sent = true;
 		return true;
+	}
+
+	void HandleUserAction(BotInfo *bi, User *u, const Anope::string &body)
+	{
+		if (!IsUserBot(bi) || !u || u->server == Me)
+			return;
+
+		Anope::string line = MediaTicketLine(body);
+		if (line.empty() || IsFlood(u, bi, line))
+			return;
+
+		Anope::string queue = QueueFor(bi);
+		if (AideTicket *existing = AideTicket::FindOpenFor(u, queue))
+		{
+			AppendTicket(existing, u, bi, line);
+			return;
+		}
+
+		auto &st = triages[u->GetUID()];
+		if (!st.started)
+		{
+			st.queue = queue;
+			st.started = Anope::CurTime;
+			st.step = 0;
+		}
+		st.notes.push_back(line);
+		SendUserPrivmsg(bi, u, _("Your file has been saved. It will be attached to the ticket once you describe the problem."));
 	}
 
 	void HandleHelpDialogue(User *u, BotInfo *bi, const Anope::string &message)
