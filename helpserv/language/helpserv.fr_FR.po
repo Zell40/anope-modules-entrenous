@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: GPL-2.0-only
 msgid ""
 msgstr ""
-"Project-Id-Version: helpserv 1.12\n"
+"Project-Id-Version: helpserv 1.16\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-08-14 14:00+0200\n"
-"PO-Revision-Date: 2026-08-18 10:10+0200\n"
+"PO-Revision-Date: 2026-08-18 10:35+0200\n"
 "Last-Translator: EntreNous\n"
 "Language-Team: French\n"
 "Language: fr_FR\n"
@@ -171,6 +171,22 @@ msgid ""
 msgstr ""
 "Alias français : LISTE, SUIVANT, PRENDRE, VOIR, FERMER, REOUVRIR, NOTE, REASSIGNER, AJOUTER, RETIRER, BOTS, AJOUTAUTO, SUPPRIAUTO, LISTAUTO.\n"
 "Files : HELP (AIDE) et REPORT (SIGNAL). JOIN / PART ajoutent ou retirent %s et %s sur les salons. AUTOADD / AUTODEL / AUTOLIST gèrent les réponses automatiques en message privé."
+
+#, c-format
+msgid "On %s and %s you can type !helpserv command (or !hserv) instead of a private message."
+msgstr "Sur %s et %s, vous pouvez taper !helpserv commande (ou !hserv) au lieu d'un message privé."
+
+#, c-format
+msgid "Usage: !helpserv command or !hserv (example: !helpserv LIST). Same commands as a private message to %s."
+msgstr "Syntaxe : !helpserv commande ou !hserv (exemple : !helpserv LIST). Mêmes commandes qu'en message privé à %s."
+
+#, c-format
+msgid "This command requires ChanServ admin access on %s."
+msgstr "Cette commande exige un accès admin ChanServ sur %s."
+
+#, c-format
+msgid "This command requires ChanServ owner or founder access on %s."
+msgstr "Cette commande exige un accès owner ou fondateur ChanServ sur %s."
 
 msgid ""
 "Helper commands: LIST, NEXT, PICKUP, SHOW, CLOSE, ADDNOTE, REASSIGN.\n"

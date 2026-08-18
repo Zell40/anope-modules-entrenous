@@ -36,19 +36,39 @@ Les tickets ouverts via AideMoi ou SignalMoi sont toujours notifiés par **HelpS
 
    Anope n’applique **que** les `include` écrits dans `anope.conf`. Un include dans `modules.conf` (ou un `module { name = "helpserv" }` vide à côté) est ignoré. Le module relit alors `conf/helpserv.conf` tout seul.
 
-Les personnes présentes sur `#_BO` ont les commandes d’équipe. Pour un opertype (ex. Helpeur) :
+Les commandes HelpServ ne viennent **jamais** du statut live (`+`, `%`, `@`, `&`, `~`). Un `@` improvisé sur `#_BO` ne suffit pas. Seuls comptent :
+
+1. l’**accès ChanServ** sur `staff_channel` (`#_BO`), nick identifié
+2. ou un **opertype** Anope (`commands = "helpserv/helper"` / `manager` / `admin`)
+
+Un membre sans accès ChanServ n’a aucune commande. `#_logs`, `#Aide.chat` et `#Signalement.chat` ne donnent aucun droit HelpServ.
+
+Échelle ChanServ sur `#_BO` (chaque palier inclut le précédent) :
+
+- **Voice** — `LIST`, `SHOW`, `ADDNOTE`
+- **Halfop / op** — plus `NEXT`, `PICKUP`, `BOTLIST`, `REOPEN`
+- **Admin** (`&` / PROTECT) — plus `JOIN`, `PART`, `REASSIGN`
+- **Owner / fondateur** — plus `AUTOADD`, `AUTODEL`, `AUTOLIST`
+
+Opertypes équivalents : `helpserv/helper` = voice, `helpserv/manager` = admin, `helpserv/admin` = owner. `helpserv/*` donne tout.
 
 ```
 commands = "hostserv/* helpserv/helper"
 ```
 
-## Commandes opérateurs (`/msg HelpServ`)
+```
+commands = "helpserv/manager"
+```
+
+## Commandes opérateurs (`/msg HelpServ` ou `!helpserv` / `!hserv` sur `#_BO` et `#_logs`)
 
 `LIST` `[HELP|REPORT]` `[UNASSIGNED|ASSIGNED|ME|ALL|CLOSED]`, `NEXT` `[HELP|REPORT]`, `PICKUP`, `SHOW`, `CLOSE`, `REOPEN`, `ADDNOTE`, `REASSIGN`.
 
 `LIST` affiche par défaut les tickets **en attente**, **en traitement** (« en attente de traitement par X ») et **fermés** (« Fermé »). Les fermés apparaissent après les tickets encore ouverts. `LIST UNASSIGNED` / `LIST ASSIGNED` / `LIST CLOSED` filtrent. `SHOW` et `REOPEN` (`REOUVRIR`) permettent de consulter ou de relancer un ticket fermé.
 
-Ajouter un bot sur un salon (indépendant de BotServ) :
+Sur `#_BO` et `#_logs`, une personne **déjà autorisée** (ChanServ `#_BO` ou opertype) peut taper `!helpserv LIST`, `!hserv SHOW 12`, `!helpserv FERMER 12`, etc. HelpServ répond dans le salon. **Ne pas utiliser `!hs`** : c’est HostServ. `channel_commands = no` dans `helpserv.conf` désactive ça.
+
+Ajouter un bot sur un salon (**admin ChanServ `#_BO`**, indépendant de BotServ) :
 
 ```
 /msg HelpServ JOIN AideMoi #salon
@@ -58,7 +78,7 @@ Ajouter un bot sur un salon (indépendant de BotServ) :
 /msg HelpServ BOTLIST
 ```
 
-Réponses automatiques en message privé (persistées, en plus de celles de `helpserv.conf`) :
+Réponses automatiques en message privé (**owner / fondateur** pour `AUTOADD` / `AUTODEL` / `AUTOLIST`) :
 
 ```
 /msg HelpServ AUTOADD AideMoi bannis, je suis banni : Vous pouvez trouver les règles ici : https://www.reseau-entrenous.fr/aide/
@@ -80,6 +100,11 @@ AideMoi et SignalMoi apparaissent dans `/bs botlist` mais **ne peuvent pas** êt
 Un `/msg BotServ ASSIGN #salon AideMoi` (ou une invitation du bot) est refusé avec un message d’erreur.
 
 Alias FR : `LISTE`, `SUIVANT`, `PRENDRE`, `VOIR`, `FERMER`, `REOUVRIR`, `NOTE`, `REASSIGNER`, `AJOUTER`, `RETIRER`, `BOTS`, `AJOUTAUTO`, `SUPPRIAUTO`, `LISTAUTO`.
+
+`AUTOLIST` affiche deux types d’entrées :
+
+- `[#id]` : réponses ajoutées en IRC avec `AUTOADD` et supprimables avec `AUTODEL`
+- `[conf]` : réponses lues depuis `helpserv.conf`, visibles mais non supprimables depuis IRC
 
 ## Commandes utilisateurs
 

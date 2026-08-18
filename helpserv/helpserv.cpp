@@ -17,6 +17,15 @@ namespace
 	const char *const STATUS_ASSIGNED = "ASSIGNED";
 	const char *const STATUS_CLOSED = "CLOSED";
 
+	enum HelpLevel
+	{
+		HELPSERV_NONE = 0,
+		HELPSERV_HELPER = 1,
+		HELPSERV_SENIOR = 2,
+		HELPSERV_MANAGER = 3,
+		HELPSERV_ADMIN = 4
+	};
+
 	Anope::string SpamKey(const User *u)
 	{
 		if (!u)
@@ -555,15 +564,6 @@ namespace
 		return ag.HasPriv("VOICE") || ag.HasPriv("VOICEME");
 	}
 
-	bool HasChannelOp(User *u, ChannelInfo *ci)
-	{
-		if (!u || !ci)
-			return false;
-		auto ag = ci->AccessFor(u);
-		return ag.HasPriv("OP") || ag.HasPriv("HALFOP") || ag.HasPriv("PROTECT")
-			|| ag.HasPriv("OWNER") || ag.HasPriv("FOUNDER") || ag.founder;
-	}
-
 	void SendUserPrivmsgLine(BotInfo *source, User *target, const Anope::string &msg, const Anope::string &msgid = "")
 	{
 		if (!source || !target || msg.empty() || !IRCD)
@@ -613,6 +613,22 @@ namespace
 		void SendMessage(CommandSource &source, const Anope::string &msg) override
 		{
 			SendUserPrivmsgLine(source.service, target, msg, source.msgid);
+		}
+	};
+
+	class ChanPrivmsgReply final
+		: public CommandReply
+	{
+		Channel *chan;
+	public:
+		explicit ChanPrivmsgReply(Channel *c) : chan(c) {}
+		void SendMessage(BotInfo *source, const Anope::string &msg) override
+		{
+			if (!source || !chan || msg.empty() || !IRCD)
+				return;
+			LineWrapper lw(msg);
+			for (Anope::string line; lw.GetLine(line); )
+				IRCD->SendPrivmsg(source, chan->name, line);
 		}
 	};
 }
@@ -1126,6 +1142,7 @@ class ModuleHelpServ
 	Anope::string report_channel;
 	Anope::string staff_channel;
 	Anope::string log_channel;
+	bool channel_commands = true;
 	Anope::string staff_prefix = "@";
 	Anope::string help_prefix = "@";
 	Anope::string report_prefix = "@";
@@ -1767,7 +1784,7 @@ public:
 	{
 		MeHelpServ = this;
 		SetAuthor("EntreNous");
-		SetVersion("1.12");
+		SetVersion("1.16");
 		ModuleManager::SetPriority(this, I_OnInvite, PRIORITY_LAST);
 	}
 
@@ -1911,6 +1928,7 @@ public:
 		report_channel = ChannelNameFromSpec(report.Get<const Anope::string>("channel", "#Signalement.chat"));
 		staff_channel = ChannelNameFromSpec(block.Get<const Anope::string>("staff_channel", "#_BO"));
 		log_channel = ChannelNameFromSpec(block.Get<const Anope::string>("log_channel", "#_logs"));
+		channel_commands = block.Get<bool>("channel_commands", "yes");
 		staff_prefix = ParseStatusPrefix(block.Get<const Anope::string>("staff_prefix", "@"));
 		help_prefix = ParseStatusPrefix(help.Get<const Anope::string>("prefix", "@"));
 		report_prefix = ParseStatusPrefix(report.Get<const Anope::string>("prefix", "@"));
@@ -2052,6 +2070,7 @@ public:
 	BotInfo *GetStaffBot() { return StaffBot; }
 	BotInfo *GetAideBot() { return AideBot; }
 	BotInfo *GetReportBot() { return ReportBot; }
+	const Anope::string &GetStaffChannel() const { return staff_channel; }
 
 	// Reference<>'s operator bool / operator* are non-const in Anope.
 	bool IsStaffBot(BotInfo *bi) { return bi && bi == static_cast<BotInfo *>(StaffBot); }
@@ -2186,56 +2205,130 @@ public:
 		return n;
 	}
 
+	bool HasHelpServPriv(User *u, const char *name) const
+	{
+		if (!u || !name)
+			return false;
+		Anope::string cmd = Anope::string("helpserv/") + name;
+		return u->HasCommand(cmd) || u->HasPriv(cmd);
+	}
+
+	HelpLevel ChanServStaffLevel(User *u) const
+	{
+		if (!u)
+			return HELPSERV_NONE;
+		auto *ci = ChannelInfo::Find(staff_channel);
+		if (!ci)
+			return HELPSERV_NONE;
+		auto ag = ci->AccessFor(u);
+		if (ag.founder || ag.HasPriv("FOUNDER") || ag.HasPriv("OWNER"))
+			return HELPSERV_ADMIN;
+		if (ag.HasPriv("PROTECT"))
+			return HELPSERV_MANAGER;
+		if (ag.HasPriv("OP") || ag.HasPriv("HALFOP"))
+			return HELPSERV_SENIOR;
+		if (ag.HasPriv("VOICE"))
+			return HELPSERV_HELPER;
+		return HELPSERV_NONE;
+	}
+
+	HelpLevel OpertypeStaffLevel(User *u) const
+	{
+		if (!u)
+			return HELPSERV_NONE;
+		if (HasHelpServPriv(u, "admin"))
+			return HELPSERV_ADMIN;
+		if (HasHelpServPriv(u, "manager"))
+			return HELPSERV_MANAGER;
+		if (HasHelpServPriv(u, "helper"))
+			return HELPSERV_HELPER;
+		return HELPSERV_NONE;
+	}
+
+	HelpLevel StaffLevel(User *u) const
+	{
+		HelpLevel oper = OpertypeStaffLevel(u);
+		HelpLevel chan = ChanServStaffLevel(u);
+		return oper > chan ? oper : chan;
+	}
+
 	bool IsStaff(User *u) const
 	{
-		if (!u)
-			return false;
-		if (u->HasCommand("helpserv/helper") || u->HasCommand("helpserv/manager") || u->HasCommand("helpserv/admin")
-			|| u->HasPriv("helpserv/helper") || u->HasPriv("helpserv/manager") || u->HasPriv("helpserv/admin"))
-			return true;
-		if (u->IsServicesOper())
-			return true;
-
-		Channel *staff = Channel::Find(staff_channel);
-		if (staff && staff->FindUser(u))
-			return true;
-
-		if (HasChannelOp(u, ChannelInfo::Find(help_channel)) || HasChannelOp(u, ChannelInfo::Find(report_channel)))
-			return true;
-
-		Channel *hc = Channel::Find(help_channel);
-		Channel *rc = Channel::Find(report_channel);
-		if (HasChanStatus(u, hc, "OP") || HasChanStatus(u, hc, "HALFOP") || HasChanStatus(u, hc, "PROTECT") || HasChanStatus(u, hc, "OWNER"))
-			return true;
-		if (HasChanStatus(u, rc, "OP") || HasChanStatus(u, rc, "HALFOP") || HasChanStatus(u, rc, "PROTECT") || HasChanStatus(u, rc, "OWNER"))
-			return true;
-		return false;
+		return StaffLevel(u) >= HELPSERV_HELPER;
 	}
 
-	bool IsManager(User *u) const
+	bool CheckStaffBotSource(CommandSource &source)
 	{
-		if (!u)
-			return false;
-		if (u->HasCommand("helpserv/manager") || u->HasCommand("helpserv/admin") || u->HasPriv("helpserv/manager") || u->HasPriv("helpserv/admin"))
-			return true;
-		auto *ci = ChannelInfo::Find(staff_channel);
-		if (ci && (ci->AccessFor(u).founder || ci->AccessFor(u).HasPriv("FOUNDER") || ci->AccessFor(u).HasPriv("OWNER")))
-			return true;
-		return u->IsServicesOper();
-	}
-
-	bool CheckStaffSource(CommandSource &source)
-	{
-		if (!IsStaff(source.GetUser()))
-		{
-			source.Reply(ACCESS_DENIED);
-			return false;
-		}
 		if (!IsStaffBot(source.service))
 		{
 			source.Reply(_("Use \002%s\002 to handle tickets."), GetStaffBot() ? GetStaffBot()->nick.c_str() : "HelpServ");
 			return false;
 		}
+		return true;
+	}
+
+	bool CheckStaffSource(CommandSource &source)
+	{
+		if (StaffLevel(source.GetUser()) < HELPSERV_HELPER)
+		{
+			source.Reply(ACCESS_DENIED);
+			return false;
+		}
+		return CheckStaffBotSource(source);
+	}
+
+	bool CheckSeniorSource(CommandSource &source)
+	{
+		if (!CheckStaffSource(source))
+			return false;
+		if (StaffLevel(source.GetUser()) < HELPSERV_SENIOR)
+		{
+			source.Reply(_("This command requires ChanServ halfop or operator access on \002%s\002."), staff_channel.c_str());
+			return false;
+		}
+		return true;
+	}
+
+	bool CheckManagerSource(CommandSource &source)
+	{
+		if (!CheckStaffSource(source))
+			return false;
+		if (StaffLevel(source.GetUser()) < HELPSERV_MANAGER)
+		{
+			source.Reply(_("This command requires ChanServ admin access on \002%s\002."), staff_channel.c_str());
+			return false;
+		}
+		return true;
+	}
+
+	bool CheckAdminSource(CommandSource &source)
+	{
+		if (!CheckStaffSource(source))
+			return false;
+		if (StaffLevel(source.GetUser()) < HELPSERV_ADMIN)
+		{
+			source.Reply(_("This command requires ChanServ owner or founder access on \002%s\002."), staff_channel.c_str());
+			return false;
+		}
+		return true;
+	}
+
+	bool StripChannelCommand(const Anope::string &msg, Anope::string &rest) const
+	{
+		Anope::string text = Anope::RemoveFormatting(msg);
+		text.trim();
+		if (text.empty() || text[0] != '!')
+			return false;
+		text.erase(text.begin());
+		spacesepstream ss(text);
+		Anope::string token;
+		if (!ss.GetToken(token))
+			return false;
+		if (!token.equals_ci("helpserv") && !token.equals_ci("hserv")
+			&& !(StaffBot && token.equals_ci(StaffBot->nick)))
+			return false;
+		rest = ss.GetRemaining();
+		rest.trim();
 		return true;
 	}
 
@@ -2844,6 +2937,8 @@ public:
 			"Queues: \002HELP\002 (\002AIDE\002) and \002REPORT\002 (\002SIGNAL\002). \002JOIN\002 / \002PART\002 add or remove \002%s\002 and \002%s\002 on channels. \002AUTOADD\002 / \002AUTODEL\002 / \002AUTOLIST\002 manage private-message keyword replies."),
 			AideBot ? AideBot->nick.c_str() : "AideMoi",
 			ReportBot ? ReportBot->nick.c_str() : "SignalMoi");
+		source.Reply(_("On \002%s\002 and \002%s\002 you can type \002!helpserv \037command\037\002 (or \002!hserv\002) instead of a private message."),
+			staff_channel.c_str(), log_channel.c_str());
 	}
 
 	EventReturn OnBotPrivmsg(User *u, BotInfo *bi, Anope::string &message, const Anope::map<Anope::string> &tags) override
@@ -2870,6 +2965,34 @@ public:
 		else
 			HandleReportDialogue(u, bi, message);
 		return EVENT_STOP;
+	}
+
+	void OnPrivmsg(User *u, Channel *c, Anope::string &msg, const Anope::map<Anope::string> &tags) override
+	{
+		if (!channel_commands || !u || !c || !StaffBot || msg.empty() || msg[0] == '\1')
+			return;
+		if (!c->name.equals_ci(staff_channel) && !c->name.equals_ci(log_channel))
+			return;
+		if (!c->FindUser(StaffBot) || !IsStaff(u))
+			return;
+
+		Anope::string rest;
+		if (!StripChannelCommand(msg, rest))
+			return;
+
+		ChanPrivmsgReply reply(c);
+		Anope::string msgid;
+		auto it = tags.find("msgid");
+		if (it != tags.end())
+			msgid = it->second;
+		CommandSource source(u->nick, u, u->Account(), &reply, StaffBot, msgid);
+		if (rest.empty())
+		{
+			source.Reply(_("Usage: \002!helpserv \037command\037\002 or \002!hserv\002 (example: \002!helpserv LIST\002). Same commands as a private message to \002%s\002."),
+				StaffBot->nick.c_str());
+			return;
+		}
+		Command::Run(source, rest);
 	}
 
 	void OnJoinChannel(User *u, Channel *c) override
@@ -3445,7 +3568,7 @@ public:
 
 	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
 	{
-		if (!MeHelpServ->CheckStaffSource(source))
+		if (!MeHelpServ->CheckSeniorSource(source))
 			return;
 		Anope::string queue;
 		if (!params.empty())
@@ -3491,7 +3614,7 @@ public:
 
 	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
 	{
-		if (!MeHelpServ->CheckStaffSource(source))
+		if (!MeHelpServ->CheckSeniorSource(source))
 			return;
 
 		AideTicket *t = nullptr;
@@ -3668,7 +3791,7 @@ public:
 
 	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
 	{
-		if (!MeHelpServ->CheckStaffSource(source))
+		if (!MeHelpServ->CheckManagerSource(source))
 			return;
 		Anope::string key = params[0];
 		if (!key.empty() && key[0] == '#')
@@ -3691,6 +3814,7 @@ public:
 	{
 		this->SendSyntax(source);
 		source.Reply(" ");
+		source.Reply(_("This command requires ChanServ admin access on \002%s\002."), MeHelpServ->GetStaffChannel().c_str());
 		source.Reply(_("Restores a closed ticket with its history and assigns it to you. The opener is notified."));
 		return true;
 	}
@@ -3748,7 +3872,7 @@ public:
 
 	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
 	{
-		if (!MeHelpServ->CheckStaffSource(source))
+		if (!MeHelpServ->CheckSeniorSource(source))
 			return;
 		Anope::string key = params[0];
 		if (!key.empty() && key[0] == '#')
@@ -3771,6 +3895,7 @@ public:
 	{
 		this->SendSyntax(source);
 		source.Reply(" ");
+		source.Reply(_("This command requires ChanServ admin access on \002%s\002."), MeHelpServ->GetStaffChannel().c_str());
 		source.Reply(_("Gives the ticket to another helper."));
 		return true;
 	}
@@ -3790,7 +3915,7 @@ public:
 
 	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
 	{
-		if (!MeHelpServ->CheckStaffSource(source))
+		if (!MeHelpServ->CheckManagerSource(source))
 			return;
 		BotInfo *bi = MeHelpServ->BotFromNick(params[0]);
 		if (!bi || MeHelpServ->IsStaffBot(bi))
@@ -3843,6 +3968,7 @@ public:
 	{
 		this->SendSyntax(source);
 		source.Reply(" ");
+		source.Reply(_("This command requires ChanServ admin access on \002%s\002."), MeHelpServ->GetStaffChannel().c_str());
 		source.Reply(_("Adds the help or report bot to a channel. Optional prefix: \002~\002 owner, \002&\002 admin, \002@\002 op, \002%%\002 halfop, \002+\002 voice, or names (admin, voice, none). Default comes from helpserv.conf. Example: \002JOIN AideMoi +#salon\002. This does not replace a BotServ assignment."));
 		return true;
 	}
@@ -3862,7 +3988,7 @@ public:
 
 	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
 	{
-		if (!MeHelpServ->CheckStaffSource(source))
+		if (!MeHelpServ->CheckManagerSource(source))
 			return;
 		BotInfo *bi = MeHelpServ->BotFromNick(params[0]);
 		if (!bi || MeHelpServ->IsStaffBot(bi))
@@ -3896,6 +4022,7 @@ public:
 	{
 		this->SendSyntax(source);
 		source.Reply(" ");
+		source.Reply(_("This command requires ChanServ admin access on \002%s\002."), MeHelpServ->GetStaffChannel().c_str());
 		source.Reply(_("Removes the help or report bot from a channel previously added with JOIN. Home channels cannot be removed."));
 		return true;
 	}
@@ -3914,7 +4041,7 @@ public:
 
 	void Execute(CommandSource &source, const std::vector<Anope::string> &) override
 	{
-		if (!MeHelpServ->CheckStaffSource(source))
+		if (!MeHelpServ->CheckSeniorSource(source))
 			return;
 
 		auto show = [&](BotInfo *bi, const Anope::string &role)
@@ -3960,7 +4087,7 @@ public:
 
 	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
 	{
-		if (!MeHelpServ->CheckStaffSource(source))
+		if (!MeHelpServ->CheckAdminSource(source))
 			return;
 		Anope::string queue = MeHelpServ->QueueFromBotParam(params[0]);
 		if (queue.empty())
@@ -3992,6 +4119,7 @@ public:
 	{
 		this->SendSyntax(source);
 		source.Reply(" ");
+		source.Reply(_("This command requires ChanServ owner or founder access on \002%s\002."), MeHelpServ->GetStaffChannel().c_str());
 		source.Reply(_("Adds a private-message keyword reply for \002AideMoi\002 or \002SignalMoi\002. If a user writes a matching phrase in private, the bot sends the reply instead of opening a ticket immediately. Separate several keys with a comma or \002/\002. Example: \002AUTOADD AideMoi bannis, je suis banni : Vous pouvez trouver les règles ici : https://example.invalid/\002"));
 		return true;
 	}
@@ -4011,7 +4139,7 @@ public:
 
 	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
 	{
-		if (!MeHelpServ->CheckStaffSource(source))
+		if (!MeHelpServ->CheckAdminSource(source))
 			return;
 		Anope::string queue = MeHelpServ->QueueFromBotParam(params[0]);
 		if (queue.empty())
@@ -4034,6 +4162,7 @@ public:
 	{
 		this->SendSyntax(source);
 		source.Reply(" ");
+		source.Reply(_("This command requires ChanServ owner or founder access on \002%s\002."), MeHelpServ->GetStaffChannel().c_str());
 		source.Reply(_("Deletes a keyword reply. Use the id from \002AUTOLIST\002, or one of the keys. Example: \002AUTODEL AideMoi 3\002"));
 		return true;
 	}
@@ -4053,7 +4182,7 @@ public:
 
 	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
 	{
-		if (!MeHelpServ->CheckStaffSource(source))
+		if (!MeHelpServ->CheckAdminSource(source))
 			return;
 		Anope::string queue;
 		if (!params.empty())
@@ -4068,18 +4197,41 @@ public:
 			}
 		}
 		unsigned n = 0;
+		auto show_reply = [&](const Anope::string &label, const Anope::string &match, const Anope::string &reply)
+		{
+			Anope::string preview = reply;
+			preview.replace_all_cs("\n", " ");
+			if (preview.length() > 80)
+				preview = preview.substr(0, 77) + "...";
+			source.Reply("%s — \002%s\002 → %s", label.c_str(), match.c_str(), preview.c_str());
+			++n;
+		};
+		if (queue.empty() || queue.equals_ci(QUEUE_HELP))
+		{
+			for (const auto &item : MeHelpServ->auto_replies)
+			{
+				Anope::string keys;
+				for (size_t i = 0; i < item.keys.size(); ++i)
+				{
+					if (i)
+						keys += ", ";
+					keys += item.keys[i];
+				}
+				if (keys.empty())
+					continue;
+				Anope::string label = Anope::string("\002[conf]\002 ")
+					+ (MeHelpServ->GetAideBot() ? MeHelpServ->GetAideBot()->nick : "AideMoi");
+				show_reply(label, keys, item.reply);
+			}
+		}
 		for (auto *a : CustomAutos)
 		{
 			if (!queue.empty() && !a->queue.equals_ci(queue))
 				continue;
 			BotInfo *bi = MeHelpServ->BotForQueue(a->queue);
-			Anope::string preview = a->reply;
-			preview.replace_all_cs("\n", " ");
-			if (preview.length() > 80)
-				preview = preview.substr(0, 77) + "...";
-			source.Reply(_("\002#%u\002 %s — \002%s\002 → %s"),
-				a->id, bi ? bi->nick.c_str() : a->queue.c_str(), a->match.c_str(), preview.c_str());
-			++n;
+			Anope::string label = Anope::Format(_("\002#%u\002 %s"), a->id,
+				bi ? bi->nick.c_str() : a->queue.c_str());
+			show_reply(label, a->match, a->reply);
 		}
 		if (!n)
 		{
@@ -4094,7 +4246,8 @@ public:
 	{
 		this->SendSyntax(source);
 		source.Reply(" ");
-		source.Reply(_("Lists keyword replies. Optional bot name (\002AideMoi\002 or \002SignalMoi\002) filters the list."));
+		source.Reply(_("This command requires ChanServ owner or founder access on \002%s\002."), MeHelpServ->GetStaffChannel().c_str());
+		source.Reply(_("Lists keyword replies. Optional bot name (\002AideMoi\002 or \002SignalMoi\002) filters the list. Entries marked \002[conf]\002 come from helpserv.conf; numbered entries come from \002AUTOADD\002."));
 		return true;
 	}
 };
