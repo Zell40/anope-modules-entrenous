@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 msgid ""
 msgstr ""
-"Project-Id-Version: helpserv 1.16\n"
+"Project-Id-Version: helpserv 1.17\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-08-14 14:00+0200\n"
 "PO-Revision-Date: 2026-08-18 10:35+0200\n"
@@ -157,20 +157,22 @@ msgstr ""
 "Les signalements sont traités par %s. Commandes utilisateur : WAIT, STATUS, CANCEL."
 
 #, c-format
-msgid ""
-"%s is the operator help desk. Tickets opened via %s and %s are delivered here.\n"
-"Helper commands: LIST, NEXT, PICKUP, SHOW, CLOSE, REOPEN, ADDNOTE, REASSIGN, JOIN, PART, BOTLIST, AUTOADD, AUTODEL, AUTOLIST."
-msgstr ""
-"%s est le service opérateurs. Les tickets ouverts via %s et %s arrivent ici.\n"
-"Commandes de l'équipe : LIST, NEXT, PICKUP, SHOW, CLOSE, REOPEN, ADDNOTE, REASSIGN, JOIN, PART, BOTLIST, AUTOADD, AUTODEL, AUTOLIST."
+msgid "%s is the operator help desk. Tickets opened via %s and %s are delivered here."
+msgstr "%s est le service opérateurs. Les tickets ouverts via %s et %s arrivent ici."
 
 #, c-format
-msgid ""
-"French aliases: LISTE, SUIVANT, PRENDRE, VOIR, FERMER, REOUVRIR, NOTE, REASSIGNER, AJOUTER, RETIRER, BOTS, AJOUTAUTO, SUPPRIAUTO, LISTAUTO.\n"
-"Queues: HELP (AIDE) and REPORT (SIGNAL). JOIN / PART add or remove %s and %s on channels. AUTOADD / AUTODEL / AUTOLIST manage private-message keyword replies."
-msgstr ""
-"Alias français : LISTE, SUIVANT, PRENDRE, VOIR, FERMER, REOUVRIR, NOTE, REASSIGNER, AJOUTER, RETIRER, BOTS, AJOUTAUTO, SUPPRIAUTO, LISTAUTO.\n"
-"Files : HELP (AIDE) et REPORT (SIGNAL). JOIN / PART ajoutent ou retirent %s et %s sur les salons. AUTOADD / AUTODEL / AUTOLIST gèrent les réponses automatiques en message privé."
+msgid "French aliases: %s."
+msgstr "Alias français : %s."
+
+msgid "Queues: HELP (AIDE) and REPORT (SIGNAL)."
+msgstr "Files : HELP (AIDE) et REPORT (SIGNAL)."
+
+#, c-format
+msgid "JOIN / PART add or remove %s and %s on channels."
+msgstr "JOIN / PART ajoutent ou retirent %s et %s sur les salons."
+
+msgid "AUTOADD / AUTODEL / AUTOLIST manage private-message keyword replies."
+msgstr "AUTOADD / AUTODEL / AUTOLIST gèrent les réponses automatiques en message privé."
 
 #, c-format
 msgid "On %s and %s you can type !helpserv command (or !hserv) instead of a private message."
@@ -179,6 +181,10 @@ msgstr "Sur %s et %s, vous pouvez taper !helpserv commande (ou !hserv)
 #, c-format
 msgid "Usage: !helpserv command or !hserv (example: !helpserv LIST). Same commands as a private message to %s."
 msgstr "Syntaxe : !helpserv commande ou !hserv (exemple : !helpserv LIST). Mêmes commandes qu'en message privé à %s."
+
+#, c-format
+msgid "This command requires ChanServ halfop or operator access on %s."
+msgstr "Cette commande exige un accès halfop ou opérateur ChanServ sur %s."
 
 #, c-format
 msgid "This command requires ChanServ admin access on %s."

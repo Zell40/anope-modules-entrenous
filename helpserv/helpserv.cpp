@@ -1784,7 +1784,7 @@ public:
 	{
 		MeHelpServ = this;
 		SetAuthor("EntreNous");
-		SetVersion("1.16");
+		SetVersion("1.17");
 		ModuleManager::SetPriority(this, I_OnInvite, PRIORITY_LAST);
 	}
 
@@ -2255,6 +2255,97 @@ public:
 	bool IsStaff(User *u) const
 	{
 		return StaffLevel(u) >= HELPSERV_HELPER;
+	}
+
+	HelpLevel StaffCommandLevel(const Anope::string &svc) const
+	{
+		if (svc.equals_ci("helpserv/list") || svc.equals_ci("helpserv/show")
+			|| svc.equals_ci("helpserv/addnote") || svc.equals_ci("helpserv/close"))
+			return HELPSERV_HELPER;
+		if (svc.equals_ci("helpserv/next") || svc.equals_ci("helpserv/pickup")
+			|| svc.equals_ci("helpserv/botlist") || svc.equals_ci("helpserv/reopen"))
+			return HELPSERV_SENIOR;
+		if (svc.equals_ci("helpserv/join") || svc.equals_ci("helpserv/part")
+			|| svc.equals_ci("helpserv/reassign"))
+			return HELPSERV_MANAGER;
+		if (svc.equals_ci("helpserv/autoadd") || svc.equals_ci("helpserv/autodel")
+			|| svc.equals_ci("helpserv/autolist"))
+			return HELPSERV_ADMIN;
+		return HELPSERV_NONE;
+	}
+
+	bool CanUseStaffCommand(User *u, const Anope::string &svc) const
+	{
+		HelpLevel need = StaffCommandLevel(svc);
+		if (need == HELPSERV_NONE)
+			return true;
+		return StaffLevel(u) >= need;
+	}
+
+	void SendStaffHelp(CommandSource &source)
+	{
+		BotInfo *staff = GetStaffBot();
+		source.Reply(_("\002%s\002 is the operator help desk. Tickets opened via \002%s\002 and \002%s\002 are delivered here."),
+			staff ? staff->nick.c_str() : "HelpServ",
+			GetAideBot() ? GetAideBot()->nick.c_str() : "AideMoi",
+			GetReportBot() ? GetReportBot()->nick.c_str() : "SignalMoi");
+
+		HelpWrapper help;
+		const CommandInfo::map &map = source.service->commands;
+		for (const auto &[c_name, info] : map)
+		{
+			if (info.hide)
+				continue;
+			Anope::string cmd;
+			spacesepstream(c_name).GetToken(cmd, 0);
+			if (cmd != c_name && map.count(cmd))
+				continue;
+			if (!CanUseStaffCommand(source.GetUser(), info.name))
+				continue;
+			ServiceReference<Command> c("Command", info.name);
+			if (!c)
+				continue;
+			source.command = c_name;
+			c->OnServHelp(source, help);
+		}
+		help.SendTo(source);
+
+		HelpLevel lv = StaffLevel(source.GetUser());
+		Anope::string aliases;
+		auto add_alias = [&](const char *name, const char *svc)
+		{
+			if (lv < StaffCommandLevel(svc))
+				return;
+			if (!aliases.empty())
+				aliases += ", ";
+			aliases += Anope::string("\002") + name + "\002";
+		};
+		add_alias("LISTE", "helpserv/list");
+		add_alias("VOIR", "helpserv/show");
+		add_alias("NOTE", "helpserv/addnote");
+		add_alias("FERMER", "helpserv/close");
+		add_alias("SUIVANT", "helpserv/next");
+		add_alias("PRENDRE", "helpserv/pickup");
+		add_alias("BOTS", "helpserv/botlist");
+		add_alias("REOUVRIR", "helpserv/reopen");
+		add_alias("AJOUTER", "helpserv/join");
+		add_alias("RETIRER", "helpserv/part");
+		add_alias("REASSIGNER", "helpserv/reassign");
+		add_alias("AJOUTAUTO", "helpserv/autoadd");
+		add_alias("SUPPRIAUTO", "helpserv/autodel");
+		add_alias("LISTAUTO", "helpserv/autolist");
+		source.Reply(" ");
+		if (!aliases.empty())
+			source.Reply(_("French aliases: %s."), aliases.c_str());
+		source.Reply(_("Queues: \002HELP\002 (\002AIDE\002) and \002REPORT\002 (\002SIGNAL\002)."));
+		if (lv >= HELPSERV_MANAGER)
+			source.Reply(_("\002JOIN\002 / \002PART\002 add or remove \002%s\002 and \002%s\002 on channels."),
+				GetAideBot() ? GetAideBot()->nick.c_str() : "AideMoi",
+				GetReportBot() ? GetReportBot()->nick.c_str() : "SignalMoi");
+		if (lv >= HELPSERV_ADMIN)
+			source.Reply(_("\002AUTOADD\002 / \002AUTODEL\002 / \002AUTOLIST\002 manage private-message keyword replies."));
+		source.Reply(_("On \002%s\002 and \002%s\002 you can type \002!helpserv \037command\037\002 (or \002!hserv\002) instead of a private message."),
+			staff_channel.c_str(), log_channel.c_str());
 	}
 
 	bool CheckStaffBotSource(CommandSource &source)
@@ -2910,15 +3001,41 @@ public:
 
 	EventReturn OnPreHelp(CommandSource &source, const std::vector<Anope::string> &params) override
 	{
-		if (!params.empty() || source.c || !IsOurBot(source.service))
+		if (source.c || !IsOurBot(source.service))
 			return EVENT_CONTINUE;
 		if (IsStaffBot(source.service))
-			source.Reply(_("\002%s\002 is the operator help desk. Tickets opened via \002%s\002 and \002%s\002 are delivered here.\n"
-				"Helper commands: \002LIST\002, \002NEXT\002, \002PICKUP\002, \002SHOW\002, \002CLOSE\002, \002REOPEN\002, \002ADDNOTE\002, \002REASSIGN\002, \002JOIN\002, \002PART\002, \002BOTLIST\002, \002AUTOADD\002, \002AUTODEL\002, \002AUTOLIST\002."),
-				StaffBot->nick.c_str(),
-				AideBot ? AideBot->nick.c_str() : "AideMoi",
-				ReportBot ? ReportBot->nick.c_str() : "SignalMoi");
-		else if (IsAideBot(source.service))
+		{
+			if (!IsStaff(source.GetUser()))
+			{
+				source.Reply(ACCESS_DENIED);
+				return EVENT_STOP;
+			}
+			if (params.empty() || params[0].equals_ci("ALL"))
+			{
+				SendStaffHelp(source);
+				return EVENT_STOP;
+			}
+			for (unsigned max = params.size(); max > 0; --max)
+			{
+				Anope::string full_command;
+				for (unsigned i = 0; i < max; ++i)
+					full_command += " " + params[i];
+				full_command.erase(full_command.begin());
+				CommandInfo *info = source.service->GetCommand(full_command);
+				if (!info)
+					continue;
+				if (!CanUseStaffCommand(source.GetUser(), info->name))
+				{
+					source.Reply(ACCESS_DENIED);
+					return EVENT_STOP;
+				}
+				break;
+			}
+			return EVENT_CONTINUE;
+		}
+		if (!params.empty())
+			return EVENT_CONTINUE;
+		if (IsAideBot(source.service))
 			source.Reply(_("\002%s\002 is the help desk. Describe your problem in a private message; a ticket is opened only once your request is clear.\n"
 				"Helpers work from \002%s\002. User commands: \002WAIT\002 (\002ATTENDRE\002), \002STATUS\002 (\002STATUT\002), \002CANCEL\002 (\002ANNULER\002)."),
 				AideBot->nick.c_str(), StaffBot ? StaffBot->nick.c_str() : "HelpServ");
@@ -2927,19 +3044,6 @@ public:
 				"Reports are handled by \002%s\002. User commands: \002WAIT\002, \002STATUS\002, \002CANCEL\002."),
 				ReportBot->nick.c_str(), StaffBot ? StaffBot->nick.c_str() : "HelpServ");
 		return EVENT_CONTINUE;
-	}
-
-	void OnPostHelp(CommandSource &source, const std::vector<Anope::string> &params) override
-	{
-		if (!params.empty() || source.c || !IsStaffBot(source.service) || !IsStaff(source.GetUser()))
-			return;
-		source.Reply(" ");
-		source.Reply(_("French aliases: \002LISTE\002, \002SUIVANT\002, \002PRENDRE\002, \002VOIR\002, \002FERMER\002, \002REOUVRIR\002, \002NOTE\002, \002REASSIGNER\002, \002AJOUTER\002, \002RETIRER\002, \002BOTS\002, \002AJOUTAUTO\002, \002SUPPRIAUTO\002, \002LISTAUTO\002.\n"
-			"Queues: \002HELP\002 (\002AIDE\002) and \002REPORT\002 (\002SIGNAL\002). \002JOIN\002 / \002PART\002 add or remove \002%s\002 and \002%s\002 on channels. \002AUTOADD\002 / \002AUTODEL\002 / \002AUTOLIST\002 manage private-message keyword replies."),
-			AideBot ? AideBot->nick.c_str() : "AideMoi",
-			ReportBot ? ReportBot->nick.c_str() : "SignalMoi");
-		source.Reply(_("On \002%s\002 and \002%s\002 you can type \002!helpserv \037command\037\002 (or \002!hserv\002) instead of a private message."),
-			staff_channel.c_str(), log_channel.c_str());
 	}
 
 	EventReturn OnBotPrivmsg(User *u, BotInfo *bi, Anope::string &message, const Anope::map<Anope::string> &tags) override
@@ -3792,7 +3896,7 @@ public:
 
 	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
 	{
-		if (!MeHelpServ->CheckManagerSource(source))
+		if (!MeHelpServ->CheckSeniorSource(source))
 			return;
 		Anope::string key = params[0];
 		if (!key.empty() && key[0] == '#')
@@ -3815,7 +3919,7 @@ public:
 	{
 		this->SendSyntax(source);
 		source.Reply(" ");
-		source.Reply(_("This command requires ChanServ admin access on \002%s\002."), MeHelpServ->GetStaffChannel().c_str());
+		source.Reply(_("This command requires ChanServ halfop or operator access on \002%s\002."), MeHelpServ->GetStaffChannel().c_str());
 		source.Reply(_("Restores a closed ticket with its history and assigns it to you. The opener is notified."));
 		return true;
 	}
@@ -3873,7 +3977,7 @@ public:
 
 	void Execute(CommandSource &source, const std::vector<Anope::string> &params) override
 	{
-		if (!MeHelpServ->CheckSeniorSource(source))
+		if (!MeHelpServ->CheckManagerSource(source))
 			return;
 		Anope::string key = params[0];
 		if (!key.empty() && key[0] == '#')
